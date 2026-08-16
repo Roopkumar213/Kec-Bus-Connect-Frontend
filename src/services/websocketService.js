@@ -15,7 +15,7 @@ class WebSocketService {
       return;
     }
 
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8081/api';
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://kec-bus-connect-backend.onrender.com/api';
     const wsUrl = apiUrl.replace('/api', '/ws');
 
     try {
