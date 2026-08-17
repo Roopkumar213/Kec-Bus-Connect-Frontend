@@ -81,6 +81,39 @@ export const api = {
     return handleResponse(res);
   },
 
+  getBoardingLocation: async () => {
+    const res = await fetch(`${API_BASE_URL}/student/boarding-location`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  updateBoardingLocation: async (locationData) => {
+    const res = await fetch(`${API_BASE_URL}/student/boarding-location`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(locationData),
+    });
+    return handleResponse(res);
+  },
+
+  confirmOnBus: async (tripId) => {
+    const res = await fetch(`${API_BASE_URL}/student/trips/${tripId}/confirm`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  notOnBus: async (tripId) => {
+    const res = await fetch(`${API_BASE_URL}/student/trips/${tripId}/not-on-bus`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
   boardBus: async (busId) => {
     const res = await fetch(`${API_BASE_URL}/students/board/${busId}`, {
       method: 'POST',
@@ -114,9 +147,42 @@ export const api = {
     return handleResponse(res);
   },
 
-  // Driver / Tracker APIs
-  updateBusLocation: async (busId, locationData) => {
-    const res = await fetch(`${API_BASE_URL}/buses/${busId}/location`, {
+  getLiveBusStatus: async (busId) => {
+    const res = await fetch(`${API_BASE_URL}/buses/${busId}/live`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  getBusStatus: async (busId) => {
+    const res = await fetch(`${API_BASE_URL}/buses/${busId}/status`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  // Driver Dedicated APIs
+  startDriverTrip: async (busId) => {
+    const res = await fetch(`${API_BASE_URL}/driver/trips/start`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ busId }),
+    });
+    return handleResponse(res);
+  },
+
+  stopDriverTrip: async (tripId) => {
+    const res = await fetch(`${API_BASE_URL}/driver/trips/${tripId}/stop`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  updateDriverBusLocation: async (busId, locationData) => {
+    const res = await fetch(`${API_BASE_URL}/driver/buses/${busId}/location`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(locationData),
@@ -124,20 +190,70 @@ export const api = {
     return handleResponse(res);
   },
 
-  startTrip: async (busId) => {
-    const res = await fetch(`${API_BASE_URL}/buses/${busId}/start`, {
+  requestPassengerConfirmation: async (tripId) => {
+    const res = await fetch(`${API_BASE_URL}/driver/trips/${tripId}/passenger-request`, {
       method: 'POST',
       headers: getHeaders(),
     });
     return handleResponse(res);
   },
 
+  getPassengerSummary: async (tripId) => {
+    const res = await fetch(`${API_BASE_URL}/driver/trips/${tripId}/passengers`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  getActiveDriverTrip: async (busId) => {
+    const res = await fetch(`${API_BASE_URL}/driver/trips/active/${busId}`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  // Fallback Bus start/stop APIs
+  startTrip: async (busId) => {
+    try {
+      return await api.startDriverTrip(busId);
+    } catch {
+      const res = await fetch(`${API_BASE_URL}/buses/${busId}/start`, {
+        method: 'POST',
+        headers: getHeaders(),
+      });
+      return handleResponse(res);
+    }
+  },
+
   stopTrip: async (busId) => {
+    try {
+      const active = await api.getActiveDriverTrip(busId);
+      if (active && active.id) {
+        return await api.stopDriverTrip(active.id);
+      }
+    } catch {
+      // fallback
+    }
     const res = await fetch(`${API_BASE_URL}/buses/${busId}/stop`, {
       method: 'POST',
       headers: getHeaders(),
     });
     return handleResponse(res);
+  },
+
+  updateBusLocation: async (busId, locationData) => {
+    try {
+      return await api.updateDriverBusLocation(busId, locationData);
+    } catch {
+      const res = await fetch(`${API_BASE_URL}/buses/${busId}/location`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(locationData),
+      });
+      return handleResponse(res);
+    }
   },
 
   // Route Public APIs
@@ -149,15 +265,7 @@ export const api = {
     return handleResponse(res);
   },
 
-  getRouteDetails: async (id) => {
-    const res = await fetch(`${API_BASE_URL}/routes/${id}`, {
-      method: 'GET',
-      headers: getHeaders(),
-    });
-    return handleResponse(res);
-  },
-
-  // Reverse Geocoding API
+  // Geocoding Proxy APIs
   reverseGeocode: async (lat, lng) => {
     const res = await fetch(`${API_BASE_URL}/geocoding/reverse?lat=${lat}&lng=${lng}`, {
       method: 'GET',
@@ -167,75 +275,15 @@ export const api = {
   },
 
   // Admin APIs
-  adminGetBuses: async () => {
-    const res = await fetch(`${API_BASE_URL}/admin/buses`, {
+  getAdminStats: async () => {
+    const res = await fetch(`${API_BASE_URL}/admin/stats`, {
       method: 'GET',
       headers: getHeaders(),
     });
     return handleResponse(res);
   },
 
-  adminCreateBus: async (busData) => {
-    const res = await fetch(`${API_BASE_URL}/admin/buses`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(busData),
-    });
-    return handleResponse(res);
-  },
-
-  adminUpdateBus: async (id, busData) => {
-    const res = await fetch(`${API_BASE_URL}/admin/buses/${id}`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify(busData),
-    });
-    return handleResponse(res);
-  },
-
-  adminDeleteBus: async (id) => {
-    const res = await fetch(`${API_BASE_URL}/admin/buses/${id}`, {
-      method: 'DELETE',
-      headers: getHeaders(),
-    });
-    return handleResponse(res);
-  },
-
-  adminGetRoutes: async () => {
-    const res = await fetch(`${API_BASE_URL}/admin/routes`, {
-      method: 'GET',
-      headers: getHeaders(),
-    });
-    return handleResponse(res);
-  },
-
-  adminCreateRoute: async (routeData) => {
-    const res = await fetch(`${API_BASE_URL}/admin/routes`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(routeData),
-    });
-    return handleResponse(res);
-  },
-
-  adminUpdateRoute: async (id, routeData) => {
-    const res = await fetch(`${API_BASE_URL}/admin/routes/${id}`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify(routeData),
-    });
-    return handleResponse(res);
-  },
-
-  adminDeleteRoute: async (id) => {
-    const res = await fetch(`${API_BASE_URL}/admin/routes/${id}`, {
-      method: 'DELETE',
-      headers: getHeaders(),
-    });
-    return handleResponse(res);
-  },
-
-  adminGetStudents: async () => {
+  getAllStudents: async () => {
     const res = await fetch(`${API_BASE_URL}/admin/students`, {
       method: 'GET',
       headers: getHeaders(),
@@ -243,13 +291,29 @@ export const api = {
     return handleResponse(res);
   },
 
-  adminGetStudentDetails: async (id) => {
-    const res = await fetch(`${API_BASE_URL}/admin/students/${id}`, {
-      method: 'GET',
+  createBus: async (busData) => {
+    const res = await fetch(`${API_BASE_URL}/admin/buses`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(busData),
+    });
+    return handleResponse(res);
+  },
+
+  updateBus: async (id, busData) => {
+    const res = await fetch(`${API_BASE_URL}/admin/buses/${id}`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(busData),
+    });
+    return handleResponse(res);
+  },
+
+  deleteBus: async (id) => {
+    const res = await fetch(`${API_BASE_URL}/admin/buses/${id}`, {
+      method: 'DELETE',
       headers: getHeaders(),
     });
     return handleResponse(res);
-  }
+  },
 };
-
-export default api;

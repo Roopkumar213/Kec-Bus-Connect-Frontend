@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import BusStatus from '../components/BusStatus';
-import { MapPin, Bus, User, LogOut, ArrowRight, ShieldCheck, GraduationCap, Navigation } from 'lucide-react';
+import { MapPin, Bus, User, LogOut, ArrowRight, ShieldCheck, GraduationCap, Navigation, Activity, Clock, Radio, CheckCircle } from 'lucide-react';
 import { api } from '../services/api';
+import { wsService } from '../services/websocketService';
 
 const StudentDashboard = ({ buses = [], onLogout }) => {
   const navigate = useNavigate();
   const [studentInfo, setStudentInfo] = useState(null);
   const [boardingAddress, setBoardingAddress] = useState('');
+  const [liveBusInfo, setLiveBusInfo] = useState(null);
 
   // Load student profile from backend / localStorage
   useEffect(() => {
@@ -63,9 +65,35 @@ const StudentDashboard = ({ buses = [], onLogout }) => {
     loadProfile();
   }, [navigate]);
 
+  // Load live bus telemetry for KEC-07
+  useEffect(() => {
+    const fetchLiveBus = async () => {
+      try {
+        const live = await api.getLiveBusStatus('KEC-07');
+        if (live) setLiveBusInfo(live);
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchLiveBus();
+
+    wsService.connect();
+    const unsub = wsService.subscribeToBus('KEC-07', (payload) => {
+      if (payload) {
+        setLiveBusInfo(prev => ({
+          ...prev,
+          ...payload,
+        }));
+      }
+    });
+
+    return () => {
+      if (unsub && typeof unsub.unsubscribe === 'function') unsub.unsubscribe();
+    };
+  }, []);
+
   if (!studentInfo) return null;
 
-  // Single bus in pilot is KEC-07
   const assignedBus = (buses && buses.length > 0) ? buses[0] : {
     busNumber: 'KEC-07',
     routeName: 'Attikuppam → KEC',
@@ -92,6 +120,9 @@ const StudentDashboard = ({ buses = [], onLogout }) => {
       </div>
     );
   };
+
+  const displaySpeed = liveBusInfo?.speed != null && liveBusInfo.speed > 0 ? `${Math.round(liveBusInfo.speed)} km/h` : '0 km/h';
+  const displayAt = liveBusInfo?.currentlyAtStop ? `● CURRENTLY AT ${liveBusInfo.currentlyAtStop.toUpperCase()}` : (liveBusInfo?.nextStop ? `En route to ${liveBusInfo.nextStop}` : 'En route to KEC');
 
   return (
     <div className="dashboard-layout">
@@ -153,14 +184,41 @@ const StudentDashboard = ({ buses = [], onLogout }) => {
                 </p>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <BusStatus status={assignedBus.status || 'RUNNING'} />
+                <BusStatus status={liveBusInfo?.status || assignedBus.status || 'RUNNING'} />
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
                   Boarding: <strong>{boardingLabel}</strong>
                 </p>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', flexWrap: 'wrap', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+            {/* Quick Live Telemetry Strip */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', background: 'var(--bg-secondary)', padding: '16px', borderRadius: '12px', marginBottom: '20px' }}>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>LIVE SPEED</span>
+                <strong style={{ display: 'block', fontSize: '18px', color: 'var(--primary)', marginTop: '2px' }}>{displaySpeed}</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>CURRENT POSITION</span>
+                <strong style={{ display: 'block', fontSize: '13px', color: liveBusInfo?.currentlyAtStop ? 'var(--success)' : 'var(--text-main)', marginTop: '2px' }}>
+                  {displayAt}
+                </strong>
+              </div>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>NEXT STOP</span>
+                <strong style={{ display: 'block', fontSize: '13px', marginTop: '2px' }}>
+                  {liveBusInfo?.nextStop || 'Dase Gownur Crossing'}
+                </strong>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+              <Link
+                to="/student/profile"
+                className="btn btn-secondary"
+                style={{ fontSize: '13px', fontWeight: 600 }}
+              >
+                Change Boarding Location
+              </Link>
               <Link 
                 to="/student/track/KEC-07"
                 className="btn btn-primary"

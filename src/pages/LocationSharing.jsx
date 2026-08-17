@@ -13,13 +13,19 @@ import {
   CheckCircle,
   Activity,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  Users,
+  BellRing,
+  UserCheck,
+  UserX,
+  Clock
 } from 'lucide-react';
 import { api } from '../services/api';
+import { wsService } from '../services/websocketService';
 
 const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
   const navigate = useNavigate();
-  const [selectedBusNumber, setSelectedBusNumber] = useState('BUS-01');
+  const [selectedBusNumber, setSelectedBusNumber] = useState('KEC-07');
   const [isTracking, setIsTracking] = useState(false);
   const [currentCoords, setCurrentCoords] = useState(null);
   const [accuracy, setAccuracy] = useState(null);
@@ -30,23 +36,97 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
   const [gpsError, setGpsError] = useState('');
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
-  const [boardedCount, setBoardedCount] = useState(0);
+  const [isRequestingPassenger, setIsRequestingPassenger] = useState(false);
+  const [passengerRequestMessage, setPassengerRequestMessage] = useState('');
+  
+  // Trip & Passenger State
+  const [activeTrip, setActiveTrip] = useState(null);
+  const [passengerSummary, setPassengerSummary] = useState({
+    confirmedCount: 0,
+    notRespondedCount: 0,
+    notOnBusCount: 0,
+    totalAssigned: 0,
+    isRequestActive: false,
+    passengers: []
+  });
 
   const watchIdRef = useRef(null);
+  const wakeLockRef = useRef(null);
   const selectedBus = buses.find(b => b.busNumber === selectedBusNumber) || buses[0] || {};
 
-  // Clean up GPS watcher on unmount
+  // Check active trip and load passengers on mount
+  useEffect(() => {
+    const fetchActiveTrip = async () => {
+      if (!selectedBus.id) return;
+      try {
+        const trip = await api.getActiveDriverTrip(selectedBus.id);
+        if (trip && trip.id) {
+          setActiveTrip(trip);
+          setIsTracking(true);
+          const summary = await api.getPassengerSummary(trip.id);
+          if (summary) setPassengerSummary(summary);
+        }
+      } catch (err) {
+        // no active trip
+      }
+    };
+    fetchActiveTrip();
+  }, [selectedBus.id]);
+
+  // Subscribe to live passenger summary updates via WebSocket
+  useEffect(() => {
+    if (!activeTrip && !selectedBus?.busNumber) return;
+    wsService.connect();
+
+    const unsub = wsService.subscribeToPassengerSummary(selectedBus.busNumber, (payload) => {
+      if (payload && payload.confirmedCount !== undefined) {
+        setPassengerSummary(payload);
+      }
+    });
+
+    return () => {
+      if (unsub && typeof unsub.unsubscribe === 'function') {
+        unsub.unsubscribe();
+      }
+    };
+  }, [activeTrip?.id, selectedBus?.busNumber]);
+
+  // Request & release screen WakeLock to prevent mobile phone sleeping while driving
+  const requestWakeLock = async () => {
+    if ('wakeLock' in navigator) {
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+      } catch (err) {
+        console.warn('Wake Lock request warning:', err.message);
+      }
+    }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      try {
+        wakeLockRef.current.release();
+        wakeLockRef.current = null;
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  // Clean up GPS watcher & WakeLock on unmount
   useEffect(() => {
     return () => {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
+      releaseWakeLock();
     };
   }, []);
 
   const handleStartTrip = async () => {
     setGpsError('');
     setIsStarting(true);
+    setPassengerRequestMessage('');
 
     if (!navigator.geolocation) {
       setGpsError('Geolocation is not supported by your device browser.');
@@ -55,12 +135,25 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
     }
 
     try {
-      // 1. Notify Spring Boot backend to transition trip state to RUNNING / ACTIVE
+      // 1. Create/Start active trip in backend
+      let startedTrip = null;
       if (selectedBus.id) {
-        await api.startTrip(selectedBus.id);
+        try {
+          startedTrip = await api.startTrip(selectedBus.id);
+          setActiveTrip(startedTrip);
+          if (startedTrip && startedTrip.id) {
+            const summary = await api.getPassengerSummary(startedTrip.id);
+            if (summary) setPassengerSummary(summary);
+          }
+        } catch (apiErr) {
+          console.warn('Trip start warning:', apiErr.message);
+        }
       }
 
-      // 2. Start Real GPS Tracking using navigator.geolocation.watchPosition
+      // 2. Request Screen WakeLock so phone screen stays on during driving
+      await requestWakeLock();
+
+      // 3. Start real GPS tracking with navigator.geolocation.watchPosition
       watchIdRef.current = navigator.geolocation.watchPosition(
         async (position) => {
           const lat = position.coords.latitude;
@@ -77,7 +170,7 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
           setLastSentTime(new Date().toLocaleTimeString());
           setUpdateCount(prev => prev + 1);
 
-          // Send real coordinates to Spring Boot
+          // Broadcast to Spring Boot
           if (selectedBus.id) {
             try {
               await api.updateBusLocation(selectedBus.id, {
@@ -88,7 +181,7 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
                 heading: head,
               });
             } catch (err) {
-              console.warn('Location broadcast to backend:', err.message);
+              console.warn('Location broadcast error:', err.message);
             }
           }
 
@@ -132,13 +225,17 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
 
   const handleStopTrip = async () => {
     setIsStopping(true);
+    setPassengerRequestMessage('');
     try {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
+      releaseWakeLock();
 
-      if (selectedBus.id) {
+      if (activeTrip && activeTrip.id) {
+        await api.stopDriverTrip(activeTrip.id);
+      } else if (selectedBus.id) {
         await api.stopTrip(selectedBus.id);
       }
 
@@ -151,168 +248,290 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
       }
 
       setIsTracking(false);
+      setActiveTrip(null);
+      setSpeed('0 km/h');
     } catch (err) {
-      setGpsError(err.message || 'Failed to stop trip.');
+      setGpsError(err.message || 'Failed to stop trip on backend.');
     } finally {
       setIsStopping(false);
     }
   };
 
+  const handleRequestPassengerConfirmation = async () => {
+    if (!activeTrip && !selectedBus.id) return;
+    setIsRequestingPassenger(true);
+    setPassengerRequestMessage('');
+    try {
+      const tripId = activeTrip?.id || selectedBus.id;
+      await api.requestPassengerConfirmation(tripId);
+      setPassengerRequestMessage('Passenger confirmation request sent to all students on this route!');
+      const summary = await api.getPassengerSummary(tripId);
+      if (summary) setPassengerSummary(summary);
+    } catch (err) {
+      setPassengerRequestMessage('Notice: ' + (err.message || 'Confirmation request broadcasted.'));
+    } finally {
+      setIsRequestingPassenger(false);
+    }
+  };
+
   return (
     <div className="dashboard-layout">
+      {/* Sidebar navigation */}
       <Sidebar role="driver" />
 
       <div className="main-content">
+        {/* Top Header */}
         <header className="dashboard-header">
           <div>
             <h1 style={{ fontSize: '20px', fontWeight: 800 }}>Driver GPS Broadcaster</h1>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Broadcast real-time bus location to students via GPS
-            </p>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Live hardware telemetry & trip control for Bus {selectedBusNumber}</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className={`badge ${isTracking ? 'badge-success' : 'badge-neutral'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <span className={`live-pulse-dot ${isTracking ? 'active' : ''}`}></span>
-              {isTracking ? 'LIVE BROADCASTING' : 'STANDBY'}
+            <span className={`badge ${isTracking ? 'badge-live' : 'badge-idle'}`}>
+              <Radio size={12} className={isTracking ? 'animate-pulse' : ''} />
+              {isTracking ? 'GPS BROADCASTING LIVE' : 'TRANSMITTER IDLE'}
             </span>
           </div>
         </header>
 
-        <main className="dashboard-body" style={{ maxWidth: '800px', margin: '0 auto', padding: '24px' }}>
+        {/* Dashboard Body */}
+        <main className="dashboard-body" style={{ maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
           
-          {/* Driver Instructions Card */}
-          <div className="card animate-fade-in" style={{ marginBottom: '24px', borderLeft: '4px solid var(--primary)' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <Radio size={18} style={{ color: 'var(--primary)' }} />
-              Driver Trip Instructions
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              1. Keep this browser tab open while driving on the route.<br />
-              2. Ensure phone <strong>Location / GPS</strong> is enabled with High Accuracy.<br />
-              3. Click <strong>Start Trip</strong> when departing from the first bus stop. Coordinates will be broadcasted live to all students.
-            </p>
-          </div>
+          {/* Active Bus & Trip Controls Card */}
+          <div className="card animate-fade-in" style={{ padding: '32px', marginBottom: '24px', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+              <div>
+                <span style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--primary)' }}>
+                  Assigned Vehicle & Route
+                </span>
+                <h2 style={{ fontSize: '28px', fontWeight: 800, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {selectedBus.busNumber || 'KEC-07'}
+                  <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '4px 12px', borderRadius: '20px' }}>
+                    {selectedBus.registrationNumber || 'AP-39-TJ-2026'}
+                  </span>
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '6px' }}>
+                  Route: <strong>{selectedBus.routeName || selectedBus.route?.name || 'Attikuppam → KEC (via MDR87)'}</strong>
+                </p>
+                {activeTrip && (
+                  <p style={{ color: 'var(--success)', fontSize: '13px', fontWeight: 600, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Activity size={14} /> Active Trip ID: {activeTrip.id}
+                  </p>
+                )}
+              </div>
 
-          {/* GPS Error Alert */}
-          {gpsError && (
-            <div style={{
-              padding: '14px 18px',
-              backgroundColor: 'var(--danger-light)',
-              color: 'var(--danger)',
-              border: '1px solid hsl(350, 80%, 90%)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '14px',
-              fontWeight: 600,
-              marginBottom: '24px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}>
-              <AlertTriangle size={20} />
-              <div>{gpsError}</div>
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {!isTracking ? (
+                  <button
+                    onClick={handleStartTrip}
+                    disabled={isStarting}
+                    className="btn btn-primary"
+                    style={{ padding: '14px 28px', fontSize: '15px', fontWeight: 700, gap: '8px', boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)' }}
+                  >
+                    <Play size={18} fill="currentColor" />
+                    {isStarting ? 'Initiating GPS…' : 'START TRIP'}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleRequestPassengerConfirmation}
+                      disabled={isRequestingPassenger}
+                      className="btn btn-secondary"
+                      style={{ padding: '14px 20px', fontSize: '14px', fontWeight: 600, gap: '8px', background: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary)', borderColor: 'var(--primary)' }}
+                    >
+                      <BellRing size={16} />
+                      {isRequestingPassenger ? 'Broadcasting…' : 'REQUEST PASSENGER CONFIRMATION'}
+                    </button>
+                    <button
+                      onClick={handleStopTrip}
+                      disabled={isStopping}
+                      className="btn"
+                      style={{ padding: '14px 28px', fontSize: '15px', fontWeight: 700, gap: '8px', background: 'var(--danger)', color: 'white', border: 'none', boxShadow: '0 4px 14px rgba(239, 68, 68, 0.3)' }}
+                    >
+                      <Square size={18} fill="currentColor" />
+                      {isStopping ? 'Ending Trip…' : 'STOP TRIP'}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-          )}
 
-          {/* Bus Selector & Trip Controls */}
-          <div className="card animate-fade-in" style={{ padding: '28px', marginBottom: '24px' }}>
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label htmlFor="bus-select" style={{ fontWeight: 700, fontSize: '14px', marginBottom: '8px', display: 'block' }}>
-                Select Your Assigned Bus
-              </label>
-              <select
-                id="bus-select"
-                className="form-control"
-                value={selectedBusNumber}
-                onChange={(e) => setSelectedBusNumber(e.target.value)}
-                disabled={isTracking}
-                style={{ fontSize: '16px', fontWeight: 700, padding: '12px 16px' }}
-              >
-                {buses.map(b => (
-                  <option key={b.busNumber} value={b.busNumber}>
-                    {b.busNumber} — {b.routeName || b.route || 'Route'} ({b.registrationNumber || 'KEC Fleet'})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Error Message */}
+            {gpsError && (
+              <div style={{ marginTop: '20px', padding: '14px 18px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '12px', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' }}>
+                <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                <span>{gpsError}</span>
+              </div>
+            )}
 
-            {/* Start / Stop Trip Buttons */}
-            {!isTracking ? (
-              <button
-                type="button"
-                className="btn btn-primary btn-lg"
-                onClick={handleStartTrip}
-                disabled={isStarting}
-                style={{ width: '100%', padding: '16px', fontSize: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
-              >
-                <Play size={20} />
-                {isStarting ? 'Initiating GPS…' : 'START TRIP (BEGIN BROADCAST)'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-danger btn-lg"
-                onClick={handleStopTrip}
-                disabled={isStopping}
-                style={{ width: '100%', padding: '16px', fontSize: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
-              >
-                <Square size={20} />
-                {isStopping ? 'Ending Trip…' : 'END TRIP (STOP BROADCAST)'}
-              </button>
+            {/* Passenger Confirmation Message Banner */}
+            {passengerRequestMessage && (
+              <div style={{ marginTop: '20px', padding: '14px 18px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '12px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' }}>
+                <CheckCircle size={18} style={{ flexShrink: 0 }} />
+                <span>{passengerRequestMessage}</span>
+              </div>
             )}
           </div>
 
-          {/* Real-Time Telemetry Dashboard */}
-          {isTracking && (
-            <div className="card animate-fade-in" style={{ padding: '24px', backgroundColor: 'hsl(215, 28%, 97%)', border: '1px solid var(--border-color)' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Live GPS Telemetry (Real-Time)
-              </h3>
+          {/* Telemetry Stats Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            {/* Speed Card */}
+            <div className="card" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>CURRENT SPEED</span>
+                <Activity size={18} color="var(--primary)" />
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: 800, color: 'var(--text-main)' }}>
+                {speed}
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                {isTracking ? 'Hardware GPS Velocity' : 'Engine Stationary'}
+              </p>
+            </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
-                <div style={{ background: 'white', padding: '16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Current Speed</span>
-                  <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>
-                    {speed}
-                  </div>
+            {/* GPS Accuracy */}
+            <div className="card" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>GPS ACCURACY</span>
+                <ShieldCheck size={18} color="var(--success)" />
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: 800, color: accuracy && accuracy <= 15 ? 'var(--success)' : 'var(--text-main)' }}>
+                {accuracy != null ? `±${accuracy} m` : '—'}
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                {accuracy && accuracy <= 15 ? 'High-Precision Fix' : 'Awaiting Satellite Lock'}
+              </p>
+            </div>
+
+            {/* Heading / Direction */}
+            <div className="card" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>HEADING</span>
+                <Compass size={18} color="var(--warning)" />
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: 800, color: 'var(--text-main)' }}>
+                {heading != null ? `${Math.round(heading)}°` : '0°'}
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                Compass orientation
+              </p>
+            </div>
+
+            {/* Packets Broadcasted */}
+            <div className="card" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>PACKETS SENT</span>
+                <RefreshCw size={18} color="var(--primary)" />
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: 800, color: 'var(--text-main)' }}>
+                {updateCount}
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                Last: {lastSentTime || 'None'}
+              </p>
+            </div>
+          </div>
+
+          {/* Passenger Roster Breakdown Card */}
+          <div className="card animate-fade-in" style={{ padding: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Users size={20} color="var(--primary)" />
+                  Passenger Manifest & Boarding Status
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Real-time confirmation status for passengers assigned to this corridor
+                </p>
+              </div>
+              <button 
+                onClick={async () => {
+                  if (activeTrip?.id) {
+                    const s = await api.getPassengerSummary(activeTrip.id);
+                    if (s) setPassengerSummary(s);
+                  }
+                }}
+                className="btn btn-secondary" 
+                style={{ padding: '8px 16px', fontSize: '12px', gap: '6px' }}
+              >
+                <RefreshCw size={14} /> Refresh Roster
+              </button>
+            </div>
+
+            {/* Passenger Count Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+              <div style={{ padding: '16px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--success)', fontSize: '13px', fontWeight: 600 }}>
+                  <UserCheck size={16} /> Confirmed on Bus
                 </div>
-
-                <div style={{ background: 'white', padding: '16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>GPS Accuracy</span>
-                  <div style={{ fontSize: '24px', fontWeight: 800, color: accuracy && accuracy <= 15 ? 'var(--success)' : 'var(--warning)', marginTop: '4px' }}>
-                    {accuracy ? `± ${accuracy} m` : 'Detecting…'}
-                  </div>
-                </div>
-
-                <div style={{ background: 'white', padding: '16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Broadcasts Sent</span>
-                  <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>
-                    {updateCount}
-                  </div>
-                </div>
-
-                <div style={{ background: 'white', padding: '16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Last Sent Time</span>
-                  <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-main)', marginTop: '8px' }}>
-                    {lastSentTime || 'Connecting…'}
-                  </div>
+                <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--success)', marginTop: '6px' }}>
+                  {passengerSummary.confirmedCount}
                 </div>
               </div>
 
-              {/* Live Coordinates Detail */}
-              {currentCoords && (
-                <div style={{ marginTop: '16px', background: 'white', padding: '14px 18px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    <MapPin size={16} style={{ color: 'var(--primary)' }} />
-                    Lat: <strong>{currentCoords.lat.toFixed(5)}°</strong>, Lng: <strong>{currentCoords.lng.toFixed(5)}°</strong>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--success)', fontWeight: 700 }}>
-                    <CheckCircle size={14} />
-                    Hardware GPS Locked
-                  </div>
+              <div style={{ padding: '16px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--warning)', fontSize: '13px', fontWeight: 600 }}>
+                  <Clock size={16} /> Not Responded
                 </div>
-              )}
+                <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--warning)', marginTop: '6px' }}>
+                  {passengerSummary.notRespondedCount}
+                </div>
+              </div>
+
+              <div style={{ padding: '16px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--danger)', fontSize: '13px', fontWeight: 600 }}>
+                  <UserX size={16} /> Not on Bus
+                </div>
+                <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--danger)', marginTop: '6px' }}>
+                  {passengerSummary.notOnBusCount}
+                </div>
+              </div>
             </div>
-          )}
+
+            {/* Passenger List Table */}
+            {passengerSummary.passengers && passengerSummary.passengers.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                      <th style={{ padding: '10px 12px' }}>Student Name</th>
+                      <th style={{ padding: '10px 12px' }}>Roll Number</th>
+                      <th style={{ padding: '10px 12px' }}>Status</th>
+                      <th style={{ padding: '10px 12px' }}>Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {passengerSummary.passengers.map((p, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '12px', fontWeight: 600 }}>{p.studentName}</td>
+                        <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{p.studentRollNumber}</td>
+                        <td style={{ padding: '12px' }}>
+                          <span style={{
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            background: p.status === 'CONFIRMED_ON_BUS' ? 'rgba(16, 185, 129, 0.15)' : p.status === 'NOT_ON_BUS' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                            color: p.status === 'CONFIRMED_ON_BUS' ? 'var(--success)' : p.status === 'NOT_ON_BUS' ? 'var(--danger)' : 'var(--warning)',
+                          }}>
+                            {p.status === 'CONFIRMED_ON_BUS' ? 'CONFIRMED ON BUS' : p.status === 'NOT_ON_BUS' ? 'NOT ON BUS' : 'NOT RESPONDED'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>
+                          {p.confirmedAt ? new Date(p.confirmedAt).toLocaleTimeString() : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                No students registered on this active trip roster yet.
+              </div>
+            )}
+          </div>
 
         </main>
       </div>

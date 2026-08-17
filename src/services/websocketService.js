@@ -83,6 +83,22 @@ class WebSocketService {
     }
   }
 
+  subscribeToPassengerRequest(busNumberOrTripId, callback) {
+    const topic = `/topic/bus/${busNumberOrTripId}/passenger-request`;
+    this.subscriptions.set(topic, callback);
+    if (this.isConnected) {
+      return this._subscribeToTopic(topic, callback);
+    }
+  }
+
+  subscribeToPassengerSummary(busNumberOrTripId, callback) {
+    const topic = `/topic/bus/${busNumberOrTripId}/passengers`;
+    this.subscriptions.set(topic, callback);
+    if (this.isConnected) {
+      return this._subscribeToTopic(topic, callback);
+    }
+  }
+
   subscribeToAllBuses(callback) {
     const topic = '/topic/buses';
     this.subscriptions.set(topic, callback);
@@ -109,4 +125,3 @@ class WebSocketService {
 }
 
 export const wsService = new WebSocketService();
-export default wsService;
