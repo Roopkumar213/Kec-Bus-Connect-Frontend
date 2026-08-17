@@ -14,7 +14,7 @@ const ChangeMapView = ({ center }) => {
   return null;
 };
 
-const MapView = ({ bus }) => {
+const MapView = ({ bus, stopEstimates = [] }) => {
   if (!bus) {
     return (
       <div 
@@ -28,36 +28,37 @@ const MapView = ({ bus }) => {
         }}
       >
         Select a bus to load the map view.
-      </div >
+      </div>
     );
   }
 
-const defaultCenter = [bus.latitude || 13.3421, bus.longitude || 78.1234];
+  const defaultCenter = [bus.latitude || 12.884713, bus.longitude || 78.479812];
+  const renderedStops = (stopEstimates && stopEstimates.length > 0) ? stopEstimates : (bus.stops || []);
 
-return (
-  <div className="map-wrapper-card" style={{ height: '100%' }}>
-    <MapContainer
-      center={defaultCenter}
-      zoom={14}
-      scrollWheelZoom={true}
-      className="map-element"
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+  return (
+    <div className="map-wrapper-card" style={{ height: '100%' }}>
+      <MapContainer
+        center={defaultCenter}
+        zoom={14}
+        scrollWheelZoom={true}
+        className="map-element"
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
 
-      {/* Helper to pan/center map when coordinates change */}
-      <ChangeMapView center={[bus.latitude, bus.longitude]} />
+        {/* Helper to pan/center map when coordinates change */}
+        <ChangeMapView center={[bus.latitude, bus.longitude]} />
 
-      {/* Render route path and stop markers */}
-      <RouteMap stops={bus.stops} path={bus.path} />
+        {/* Render route path and stop markers with live ETA */}
+        <RouteMap stops={renderedStops} path={bus.path} />
 
-      {/* Render active bus marker */}
-      <BusMarker bus={bus} />
-    </MapContainer>
-  </div>
-);
+        {/* Render active bus marker */}
+        <BusMarker bus={bus} />
+      </MapContainer>
+    </div>
+  );
 };
 
 export default MapView;
