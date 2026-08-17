@@ -46,7 +46,7 @@ const RequireDriverAuth = ({ children }) => {
 function App() {
   const [buses, setBuses] = useState(initialBuses);
 
-  // Fetch real buses and routes from Spring Boot backend
+  // Fetch real buses and routes from Spring Boot backend with robust fallback
   const fetchBusesData = async () => {
     try {
       const activeBuses = await api.getActiveBuses();
@@ -56,8 +56,10 @@ function App() {
         return initialBuses;
       }
 
+      const defaultRoute = (activeRoutes && activeRoutes.length > 0) ? activeRoutes[0] : null;
+
       const mergedBuses = await Promise.all(activeBuses.map(async (bus) => {
-        const route = (activeRoutes || []).find(r => r.id === bus.routeId);
+        const route = (activeRoutes || []).find(r => r.id === bus.routeId || r.name === bus.routeName) || defaultRoute;
         
         let location = null;
         try {
@@ -66,51 +68,73 @@ function App() {
           // ignore if no location record yet
         }
 
-        const path = route && route.stops 
-          ? route.stops.map(stop => [
-              stop.location ? stop.location.coordinates[1] : 12.7508, 
-              stop.location ? stop.location.coordinates[0] : 78.3644
-            ]) 
-          : [];
+        // Helper to extract lat / lng from GeoPoint or plain object
+        const extractCoords = (loc, defaultLat = 12.884713, defaultLng = 78.479812) => {
+          if (!loc) return { lat: defaultLat, lng: defaultLng };
+          if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+            return { lat: Number(loc.coordinates[1]), lng: Number(loc.coordinates[0]) };
+          }
+          if (loc.latitude !== undefined && loc.longitude !== undefined) {
+            return { lat: Number(loc.latitude), lng: Number(loc.longitude) };
+          }
+          if (loc.lat !== undefined && loc.lng !== undefined) {
+            return { lat: Number(loc.lat), lng: Number(loc.lng) };
+          }
+          return { lat: defaultLat, lng: defaultLng };
+        };
 
-        const stops = route && route.stops 
-          ? route.stops.map((stop) => ({
+        // Extract stops
+        let stops = [];
+        if (route && route.stops && route.stops.length > 0) {
+          stops = route.stops.map((stop) => {
+            const c = extractCoords(stop.location || stop);
+            return {
               name: stop.name,
               reached: false,
               current: false,
-              lat: stop.location ? stop.location.coordinates[1] : 12.7508,
-              lng: stop.location ? stop.location.coordinates[0] : 78.3644,
-              latitude: stop.location ? stop.location.coordinates[1] : 12.7508,
-              longitude: stop.location ? stop.location.coordinates[0] : 78.3644
-            }))
-          : [];
+              lat: c.lat,
+              lng: c.lng,
+              latitude: c.lat,
+              longitude: c.lng,
+              landmark: stop.landmark || stop.name
+            };
+          });
+        } else if (initialBuses[0] && initialBuses[0].stops) {
+          stops = initialBuses[0].stops;
+        }
 
-        const latitude = location && location.location 
-          ? (location.location.latitude !== undefined ? location.location.latitude : location.location.coordinates[1])
-          : (stops.length > 0 ? stops[0].lat : 12.7508);
-        const longitude = location && location.location 
-          ? (location.location.longitude !== undefined ? location.location.longitude : location.location.coordinates[0])
-          : (stops.length > 0 ? stops[0].lng : 78.3644);
+        // Extract path
+        let path = [];
+        if (stops.length > 0) {
+          path = stops.map(s => [s.lat, s.lng]);
+        }
+
+        // Bus live coordinates
+        const busCoords = extractCoords(
+          location?.location || location, 
+          stops.length > 0 ? stops[0].lat : 12.884713, 
+          stops.length > 0 ? stops[0].lng : 78.479812
+        );
 
         return {
           id: bus.id,
           busNumber: bus.busNumber || 'KEC-07',
           registrationNumber: bus.registrationNumber || 'AP-39-TJ-2026',
           route: route ? route.name : 'Attikuppam → KEC (via MDR87)',
-          routeName: route ? route.name : 'Attikuppam → KEC',
+          routeName: route ? route.name : 'Attikuppam → KEC (via MDR87)',
           routeFullName: 'Attikuppam → KEC (via MDR87)',
           totalDistance: '39.8 km',
-          status: bus.status || 'NOT_STARTED',
+          status: bus.status || 'RUNNING',
           driverName: 'Driver Name',
           driverPhone: 'XXXXXXXXXXXXXX',
-          latitude,
-          longitude,
+          latitude: busCoords.lat,
+          longitude: busCoords.lng,
           lastUpdated: location ? 'Just now' : 'Standby',
           speed: location && location.speed ? `${location.speed} km/h` : '0 km/h',
           passengers: 28,
           stops,
           path,
-          lastUpdatedTimestamp: Date.now()
+          lastUpdatedTimestamp: location?.updatedAt ? new Date(location.updatedAt).getTime() : Date.now()
         };
       }));
 
@@ -125,7 +149,9 @@ function App() {
     // Initial fetch from Spring Boot
     const init = async () => {
       const data = await fetchBusesData();
-      setBuses(data);
+      if (data && data.length > 0) {
+        setBuses(data);
+      }
     };
     init();
 
@@ -136,8 +162,8 @@ function App() {
         setBuses(prevBuses =>
           prevBuses.map(bus => {
             if (bus.busNumber === payload.busNumber) {
-              const lat = payload.location ? payload.location.latitude : payload.latitude;
-              const lng = payload.location ? payload.location.longitude : payload.longitude;
+              const lat = payload.location?.latitude ?? payload.location?.coordinates?.[1] ?? payload.latitude;
+              const lng = payload.location?.longitude ?? payload.location?.coordinates?.[0] ?? payload.longitude;
               return {
                 ...bus,
                 latitude: lat != null ? lat : bus.latitude,
@@ -157,7 +183,9 @@ function App() {
     // Heartbeat sync every 15 seconds to ensure consistency with backend
     const interval = setInterval(async () => {
       const fresh = await fetchBusesData();
-      setBuses(fresh);
+      if (fresh && fresh.length > 0) {
+        setBuses(fresh);
+      }
     }, 15000);
 
     return () => {
@@ -194,7 +222,9 @@ function App() {
 
   const handleRefreshLocation = async (busNumber) => {
     const fresh = await fetchBusesData();
-    setBuses(fresh);
+    if (fresh && fresh.length > 0) {
+      setBuses(fresh);
+    }
   };
 
   const handleAddBus = async (newBus) => {
