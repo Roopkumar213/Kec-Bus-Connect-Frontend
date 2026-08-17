@@ -89,11 +89,7 @@ npm run preview
 
 ## 🔒 Credentials for Testing
 
-| Role | Email | Password |
-|---|---|---|
-| **Student** | `student@kec.ac.in` | `password` |
-| **Driver** | `driver@kec.ac.in` | `password` |
-| **Admin** | `admin@kec.ac.in` | `admin123` |
+
 
 ---
 
