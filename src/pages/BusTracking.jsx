@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import MapView from '../components/MapView';
@@ -98,7 +98,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
           }
         }
       } catch (e) {
-        // Fallback to static mock if backend unreachable
+        // fallback
       }
     };
     fetchLiveDetails();
@@ -308,19 +308,88 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
   const rawSpeedNum = typeof selectedBus.speed === 'string' ? parseFloat(selectedBus.speed) : (selectedBus.speed || 0);
   const displaySpeed = isNaN(rawSpeedNum) || rawSpeedNum <= 0 ? '0 km/h' : `${Math.round(rawSpeedNum)} km/h`;
 
-  // Student ETA Calculation (Requirement 12)
-  const targetStop = stops.find(s => s.name === selectedStop) || stops[stops.length - 1];
+  // Dynamic ETA Calculation to ALL upcoming stops along the route
+  const stopEstimates = useMemo(() => {
+    if (!selectedBus.latitude || !selectedBus.longitude || stops.length === 0) return [];
+    
+    // Use actual bus velocity or standard rural transit speed (28 km/h)
+    const effectiveSpeedKmh = rawSpeedNum > 0 ? rawSpeedNum : 28;
+    const targetNext = isCurrentlyAtStop ? nearestStopIndex + 1 : nearestStopIndex;
+
+    return stops.map((stop, idx) => {
+      // 1. Reached / Passed stops
+      if (idx < nearestStopIndex && !isCurrentlyAtStop) {
+        return {
+          ...stop,
+          status: 'PASSED',
+          distanceKm: 0,
+          etaMinutes: 0,
+          etaText: 'Reached',
+          clockTime: ''
+        };
+      }
+
+      // 2. Currently At stop
+      if (isCurrentlyAtStop && idx === nearestStopIndex) {
+        return {
+          ...stop,
+          status: 'CURRENT',
+          distanceKm: 0,
+          etaMinutes: 0,
+          etaText: 'At Stop Now',
+          clockTime: 'Now'
+        };
+      }
+
+      // 3. Upcoming stops: calculate cumulative distance along corridor
+      let distFromBusKm = 0;
+      if (targetNext < stops.length) {
+        distFromBusKm = calculateDistanceKm(selectedBus.latitude, selectedBus.longitude, stops[targetNext].lat, stops[targetNext].lng);
+        for (let i = targetNext; i < idx; i++) {
+          distFromBusKm += calculateDistanceKm(stops[i].lat, stops[i].lng, stops[i + 1].lat, stops[i + 1].lng);
+        }
+      } else {
+        distFromBusKm = calculateDistanceKm(selectedBus.latitude, selectedBus.longitude, stop.lat, stop.lng);
+      }
+
+      const roundedDist = Math.max(0.1, Math.round(distFromBusKm * 10) / 10);
+      const minutes = Math.max(1, Math.round((roundedDist / effectiveSpeedKmh) * 60));
+      const clockTime = new Date(Date.now() + minutes * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      let etaText = `in ~${minutes} min${minutes > 1 ? 's' : ''}`;
+      if (minutes >= 60) {
+        const hrs = Math.floor(minutes / 60);
+        const remMins = minutes % 60;
+        etaText = `in ~${hrs}h ${remMins}m`;
+      }
+
+      return {
+        ...stop,
+        status: 'UPCOMING',
+        distanceKm: roundedDist,
+        etaMinutes: minutes,
+        etaText,
+        clockTime
+      };
+    });
+  }, [selectedBus.latitude, selectedBus.longitude, stops, nearestStopIndex, isCurrentlyAtStop, rawSpeedNum]);
+
+  // Specific selected stop ETA
+  const targetStopEstimate = stopEstimates.find(s => s.name === selectedStop) || stopEstimates[stopEstimates.length - 1];
   let etaDisplay = 'ETA UNAVAILABLE';
 
   if (freshnessState === 'LOCATION_DELAYED') {
     etaDisplay = 'ETA UNAVAILABLE';
-  } else if (rawSpeedNum === 0) {
-    etaDisplay = 'BUS IS CURRENTLY STOPPED';
-  } else if (targetStop && selectedBus.latitude != null) {
-    const distToTargetKm = calculateDistanceKm(selectedBus.latitude, selectedBus.longitude, targetStop.lat, targetStop.lng);
-    const avgSpeed = Math.max(rawSpeedNum, 20); // assume minimum corridor speed for realistic travel estimate
-    const mins = Math.max(1, Math.round((distToTargetKm / avgSpeed) * 60));
-    etaDisplay = `Approximately ${mins} minute${mins > 1 ? 's' : ''}`;
+  } else if (rawSpeedNum === 0 && selectedBus.status === 'NOT_STARTED') {
+    etaDisplay = targetStopEstimate ? `${targetStopEstimate.etaText} (Trip Scheduled)` : 'TRIP NOT STARTED';
+  } else if (targetStopEstimate) {
+    if (targetStopEstimate.status === 'CURRENT') {
+      etaDisplay = 'BUS IS AT YOUR STOP NOW';
+    } else if (targetStopEstimate.status === 'PASSED') {
+      etaDisplay = 'BUS HAS ALREADY PASSED';
+    } else {
+      etaDisplay = `${targetStopEstimate.etaText} • ${targetStopEstimate.clockTime} (${targetStopEstimate.distanceKm} km)`;
+    }
   }
 
   return (
@@ -364,7 +433,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
         {/* Dashboard Body */}
         <main className="dashboard-body">
           
-          {/* Requirement 20: 3-Minute GPS Delay Warning Banner */}
+          {/* 3-Minute GPS Delay Warning Banner */}
           {freshnessState === 'LOCATION_DELAYED' && (
             <div style={{
               background: 'rgba(239, 68, 68, 0.12)',
@@ -388,7 +457,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
             </div>
           )}
 
-          {/* Passenger Confirmation Modal / Banner (Requirement 13 & 14) */}
+          {/* Passenger Confirmation Modal / Banner */}
           {passengerRequestReceived && !passengerStatus && (
             <div style={{
               background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(16, 185, 129, 0.12))',
@@ -459,7 +528,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
             </div>
           )}
 
-          {/* Telemetry Overview Cards (Requirement 7, 8, 9, 12, 23) */}
+          {/* Telemetry Overview Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             
             {/* Bus ID & Status */}
@@ -519,11 +588,11 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
               <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', textTransform: 'uppercase' }}>
                 ESTIMATED ARRIVAL (ETA)
               </span>
-              <div style={{ fontSize: '16px', fontWeight: 800, marginTop: '4px', color: 'var(--text-main)' }}>
+              <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '4px', color: 'var(--text-main)' }}>
                 {etaDisplay}
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                To stop: {selectedStop || 'Destination'}
+                To stop: <strong>{selectedStop || 'Destination'}</strong>
               </p>
             </div>
 
@@ -533,7 +602,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', alignItems: 'stretch' }} className="tracking-grid-layout">
             
             {/* Live Leaflet Map Column */}
-            <div className="card" style={{ padding: '0', overflow: 'hidden', minHeight: '480px', display: 'flex', flexDirection: 'column' }}>
+            <div className="card" style={{ padding: '0', overflow: 'hidden', minHeight: '520px', display: 'flex', flexDirection: 'column' }}>
               <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Navigation size={16} color="var(--primary)" />
@@ -545,14 +614,14 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
               </div>
 
               <div style={{ flex: 1, position: 'relative' }}>
-                <MapView bus={selectedBus} />
+                <MapView bus={selectedBus} stopEstimates={stopEstimates} />
               </div>
             </div>
 
-            {/* Route Stops Progress Timeline Column (Requirement 8 & 23) */}
-            <div className="card" style={{ padding: '24px', maxHeight: '560px', overflowY: 'auto' }}>
+            {/* Route Stops Progress Timeline with Live Per-Stop ETAs */}
+            <div className="card" style={{ padding: '24px', maxHeight: '600px', overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0 }}>Route Stops Timeline</h3>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0 }}>Live Route Stops & ETAs</h3>
                 <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{stops.length} Stops Total</span>
               </div>
 
@@ -574,9 +643,9 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
 
               {/* Stops Progress Sequence */}
               <div className="route-timeline" style={{ paddingLeft: '8px' }}>
-                {stops.map((stop, idx) => {
-                  const isCurrent = isCurrentlyAtStop && nearestStopIndex === idx;
-                  const isReached = !isCurrent && nearestStopIndex > idx;
+                {stopEstimates.map((stop, idx) => {
+                  const isCurrent = stop.status === 'CURRENT';
+                  const isReached = stop.status === 'PASSED';
                   const isSelected = stop.name === selectedStop;
 
                   return (
@@ -586,7 +655,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
                         display: 'flex', 
                         alignItems: 'flex-start', 
                         gap: '12px', 
-                        marginBottom: '16px',
+                        marginBottom: '18px',
                         position: 'relative'
                       }}
                     >
@@ -594,8 +663,8 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         {isCurrent ? (
                           <div style={{
-                            width: '18px',
-                            height: '18px',
+                            width: '20px',
+                            height: '20px',
                             borderRadius: '50%',
                             background: 'var(--success)',
                             boxShadow: '0 0 0 4px rgba(16, 185, 129, 0.3)',
@@ -608,8 +677,8 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
                           </div>
                         ) : isReached ? (
                           <div style={{
-                            width: '18px',
-                            height: '18px',
+                            width: '20px',
+                            height: '20px',
                             borderRadius: '50%',
                             background: 'var(--primary)',
                             display: 'flex',
@@ -621,60 +690,91 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
                           </div>
                         ) : (
                           <div style={{
-                            width: '18px',
-                            height: '18px',
+                            width: '20px',
+                            height: '20px',
                             borderRadius: '50%',
                             border: '2px solid var(--border-color)',
-                            background: 'var(--bg-main)'
-                          }} />
+                            background: 'var(--bg-main)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: 'var(--text-secondary)'
+                          }}>
+                            {idx + 1}
+                          </div>
                         )}
 
-                        {idx < stops.length - 1 && (
+                        {idx < stopEstimates.length - 1 && (
                           <div style={{
                             width: '2px',
-                            height: '24px',
+                            height: '32px',
                             background: isReached ? 'var(--primary)' : 'var(--border-color)',
                             margin: '2px 0'
                           }} />
                         )}
                       </div>
 
-                      {/* Stop Info */}
+                      {/* Stop Info & Estimated Arrival Times */}
                       <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                           <span style={{ 
                             fontSize: '13px', 
-                            fontWeight: isCurrent ? 800 : (isSelected ? 700 : 500),
+                            fontWeight: isCurrent ? 800 : (isSelected ? 700 : 600),
                             color: isCurrent ? 'var(--success)' : (isSelected ? 'var(--primary)' : 'var(--text-main)')
                           }}>
                             {stop.name}
                           </span>
 
-                          {isCurrent && (
+                          {isSelected && (
                             <span style={{
                               fontSize: '10px',
                               fontWeight: 800,
-                              background: 'var(--success)',
-                              color: 'white',
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              letterSpacing: '0.5px'
-                            }}>
-                              CURRENTLY AT {stop.name.toUpperCase()}
-                            </span>
-                          )}
-
-                          {isSelected && !isCurrent && (
-                            <span style={{
-                              fontSize: '10px',
-                              fontWeight: 700,
-                              background: 'rgba(37, 99, 235, 0.1)',
+                              background: 'rgba(37, 99, 235, 0.12)',
                               color: 'var(--primary)',
-                              padding: '2px 6px',
+                              padding: '2px 8px',
                               borderRadius: '6px'
                             }}>
                               YOUR STOP
                             </span>
+                          )}
+                        </div>
+
+                        {/* Stop Status / ETA Subtitle */}
+                        <div style={{ marginTop: '3px', fontSize: '12px' }}>
+                          {isCurrent ? (
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              background: 'var(--success)',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: '10px',
+                              letterSpacing: '0.5px'
+                            }}>
+                              ● CURRENTLY AT {stop.name.toUpperCase()}
+                            </span>
+                          ) : isReached ? (
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                              ✓ Passed / Reached
+                            </span>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ 
+                                color: 'var(--primary)', 
+                                fontWeight: 700, 
+                                background: 'rgba(37, 99, 235, 0.08)',
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                fontSize: '11px'
+                              }}>
+                                ⏱ {stop.etaText} {stop.clockTime && `(${stop.clockTime})`}
+                              </span>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
+                                • {stop.distanceKm} km away
+                              </span>
+                            </div>
                           )}
                         </div>
                       </div>
