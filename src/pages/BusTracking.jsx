@@ -274,14 +274,20 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
   };
 
   // Determine Stop Proximity (Requirement 8 & 9)
-  const stops = selectedBus.stops || [];
+  const stops = selectedBus?.stops || [];
   let nearestStopName = null;
   let nearestStopDistanceMeters = Infinity;
   let nearestStopIndex = -1;
 
-  if (selectedBus.latitude != null && selectedBus.longitude != null && stops.length > 0) {
+  const validBusLat = Number(selectedBus?.latitude);
+  const validBusLng = Number(selectedBus?.longitude);
+  const hasValidBusCoords = !isNaN(validBusLat) && !isNaN(validBusLng) && isFinite(validBusLat) && isFinite(validBusLng);
+
+  if (hasValidBusCoords && stops.length > 0) {
     stops.forEach((stop, idx) => {
-      const distKm = calculateDistanceKm(selectedBus.latitude, selectedBus.longitude, stop.lat, stop.lng);
+      const stopLat = Number(stop.lat ?? stop.latitude ?? (Array.isArray(stop.location?.coordinates) ? stop.location.coordinates[1] : 0));
+      const stopLng = Number(stop.lng ?? stop.longitude ?? (Array.isArray(stop.location?.coordinates) ? stop.location.coordinates[0] : 0));
+      const distKm = calculateDistanceKm(validBusLat, validBusLng, stopLat, stopLng);
       const distM = distKm * 1000;
       if (distM < nearestStopDistanceMeters) {
         nearestStopDistanceMeters = distM;
@@ -300,27 +306,35 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
   if (nextStopIndex >= stops.length) nextStopIndex = stops.length - 1;
   const nextStop = stops[nextStopIndex];
   
-  const distanceToNextStopKm = (selectedBus.latitude != null && nextStop) 
-    ? calculateDistanceKm(selectedBus.latitude, selectedBus.longitude, nextStop.lat, nextStop.lng)
+  const nextStopLat = Number(nextStop?.lat ?? nextStop?.latitude ?? (Array.isArray(nextStop?.location?.coordinates) ? nextStop.location.coordinates[1] : 0));
+  const nextStopLng = Number(nextStop?.lng ?? nextStop?.longitude ?? (Array.isArray(nextStop?.location?.coordinates) ? nextStop.location.coordinates[0] : 0));
+
+  const distanceToNextStopKm = (hasValidBusCoords && nextStop) 
+    ? Math.round(calculateDistanceKm(validBusLat, validBusLng, nextStopLat, nextStopLng) * 10) / 10
     : 0;
 
   // Current Speed (Requirement 7)
-  const rawSpeedNum = typeof selectedBus.speed === 'string' ? parseFloat(selectedBus.speed) : (selectedBus.speed || 0);
+  const rawSpeedNum = typeof selectedBus?.speed === 'string' ? parseFloat(selectedBus.speed) : (selectedBus?.speed || 0);
   const displaySpeed = isNaN(rawSpeedNum) || rawSpeedNum <= 0 ? '0 km/h' : `${Math.round(rawSpeedNum)} km/h`;
 
   // Dynamic ETA Calculation to ALL upcoming stops along the route
   const stopEstimates = useMemo(() => {
-    if (!selectedBus.latitude || !selectedBus.longitude || stops.length === 0) return [];
+    if (!hasValidBusCoords || stops.length === 0) return [];
     
     // Use actual bus velocity or standard rural transit speed (28 km/h)
     const effectiveSpeedKmh = rawSpeedNum > 0 ? rawSpeedNum : 28;
     const targetNext = isCurrentlyAtStop ? nearestStopIndex + 1 : nearestStopIndex;
 
     return stops.map((stop, idx) => {
+      const sLat = Number(stop.lat ?? stop.latitude ?? (Array.isArray(stop.location?.coordinates) ? stop.location.coordinates[1] : 0));
+      const sLng = Number(stop.lng ?? stop.longitude ?? (Array.isArray(stop.location?.coordinates) ? stop.location.coordinates[0] : 0));
+
       // 1. Reached / Passed stops
       if (idx < nearestStopIndex && !isCurrentlyAtStop) {
         return {
           ...stop,
+          lat: sLat,
+          lng: sLng,
           status: 'PASSED',
           distanceKm: 0,
           etaMinutes: 0,
@@ -333,6 +347,8 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
       if (isCurrentlyAtStop && idx === nearestStopIndex) {
         return {
           ...stop,
+          lat: sLat,
+          lng: sLng,
           status: 'CURRENT',
           distanceKm: 0,
           etaMinutes: 0,
@@ -343,18 +359,34 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
 
       // 3. Upcoming stops: calculate cumulative distance along corridor
       let distFromBusKm = 0;
-      if (targetNext < stops.length) {
-        distFromBusKm = calculateDistanceKm(selectedBus.latitude, selectedBus.longitude, stops[targetNext].lat, stops[targetNext].lng);
+      if (targetNext < stops.length && stops[targetNext]) {
+        const tnLat = Number(stops[targetNext].lat ?? stops[targetNext].latitude ?? (Array.isArray(stops[targetNext].location?.coordinates) ? stops[targetNext].location.coordinates[1] : 0));
+        const tnLng = Number(stops[targetNext].lng ?? stops[targetNext].longitude ?? (Array.isArray(stops[targetNext].location?.coordinates) ? stops[targetNext].location.coordinates[0] : 0));
+        distFromBusKm = calculateDistanceKm(validBusLat, validBusLng, tnLat, tnLng);
         for (let i = targetNext; i < idx; i++) {
-          distFromBusKm += calculateDistanceKm(stops[i].lat, stops[i].lng, stops[i + 1].lat, stops[i + 1].lng);
+          if (stops[i] && stops[i + 1]) {
+            const iLat = Number(stops[i].lat ?? stops[i].latitude ?? (Array.isArray(stops[i].location?.coordinates) ? stops[i].location.coordinates[1] : 0));
+            const iLng = Number(stops[i].lng ?? stops[i].longitude ?? (Array.isArray(stops[i].location?.coordinates) ? stops[i].location.coordinates[0] : 0));
+            const nextLat = Number(stops[i + 1].lat ?? stops[i + 1].latitude ?? (Array.isArray(stops[i + 1].location?.coordinates) ? stops[i + 1].location.coordinates[1] : 0));
+            const nextLng = Number(stops[i + 1].lng ?? stops[i + 1].longitude ?? (Array.isArray(stops[i + 1].location?.coordinates) ? stops[i + 1].location.coordinates[0] : 0));
+            distFromBusKm += calculateDistanceKm(iLat, iLng, nextLat, nextLng);
+          }
         }
       } else {
-        distFromBusKm = calculateDistanceKm(selectedBus.latitude, selectedBus.longitude, stop.lat, stop.lng);
+        distFromBusKm = calculateDistanceKm(validBusLat, validBusLng, sLat, sLng);
       }
 
       const roundedDist = Math.max(0.1, Math.round(distFromBusKm * 10) / 10);
       const minutes = Math.max(1, Math.round((roundedDist / effectiveSpeedKmh) * 60));
-      const clockTime = new Date(Date.now() + minutes * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      let clockTime = '';
+      if (!isNaN(minutes) && isFinite(minutes) && minutes > 0) {
+        try {
+          clockTime = new Date(Date.now() + minutes * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch {
+          clockTime = '';
+        }
+      }
 
       let etaText = `in ~${minutes} min${minutes > 1 ? 's' : ''}`;
       if (minutes >= 60) {
@@ -365,6 +397,8 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
 
       return {
         ...stop,
+        lat: sLat,
+        lng: sLng,
         status: 'UPCOMING',
         distanceKm: roundedDist,
         etaMinutes: minutes,
@@ -372,7 +406,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
         clockTime
       };
     });
-  }, [selectedBus.latitude, selectedBus.longitude, stops, nearestStopIndex, isCurrentlyAtStop, rawSpeedNum]);
+  }, [validBusLat, validBusLng, stops, nearestStopIndex, isCurrentlyAtStop, rawSpeedNum]);
 
   // Specific selected stop ETA
   const targetStopEstimate = stopEstimates.find(s => s.name === selectedStop) || stopEstimates[stopEstimates.length - 1];
