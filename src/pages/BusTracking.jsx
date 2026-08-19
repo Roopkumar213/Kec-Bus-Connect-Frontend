@@ -29,7 +29,10 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
   const { busNumber } = useParams();
   const navigate = useNavigate();
 
-  const [selectedBus, setSelectedBus] = useState(null);
+  const [selectedBus, setSelectedBus] = useState(() => {
+    const list = (buses && buses.length > 0) ? buses : initialBuses;
+    return list.find(b => b.busNumber === busNumber) || list.find(b => b.busNumber === 'KEC-07') || list[0] || null;
+  });
   const [selectedStop, setSelectedStop] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTripId, setActiveTripId] = useState(null);
@@ -57,7 +60,8 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
 
   // Sync active bus from route params or fallback to KEC-07
   useEffect(() => {
-    const bus = buses.find(b => b.busNumber === busNumber) || buses.find(b => b.busNumber === 'KEC-07') || buses[0];
+    const list = (buses && buses.length > 0) ? buses : initialBuses;
+    const bus = list.find(b => b.busNumber === busNumber) || list.find(b => b.busNumber === 'KEC-07') || list[0];
     if (bus) {
       setSelectedBus(bus);
       const savedStop = localStorage.getItem(`kec_stop_${bus.busNumber}`);
@@ -77,19 +81,22 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
         const id = selectedBus.id || selectedBus.busNumber;
         const live = await api.getLiveBusStatus(id);
         if (live && live.latitude != null && live.longitude != null) {
-          setSelectedBus(prev => ({
-            ...prev,
-            latitude: live.latitude,
-            longitude: live.longitude,
-            speed: live.speed != null ? `${live.speed} km/h` : prev.speed,
-            status: live.status || prev.status,
-            accuracy: live.accuracy,
-            heading: live.heading,
-            currentlyAtStop: live.currentlyAtStop,
-            nextStop: live.nextStop,
-            distanceToNextStopKm: live.distanceToNextStopKm,
-            lastUpdatedTimestamp: live.lastUpdated ? new Date(live.lastUpdated).getTime() : Date.now(),
-          }));
+          setSelectedBus(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              latitude: live.latitude,
+              longitude: live.longitude,
+              speed: live.speed != null ? `${live.speed} km/h` : prev.speed,
+              status: live.status || prev.status,
+              accuracy: live.accuracy,
+              heading: live.heading,
+              currentlyAtStop: live.currentlyAtStop,
+              nextStop: live.nextStop,
+              distanceToNextStopKm: live.distanceToNextStopKm,
+              lastUpdatedTimestamp: live.lastUpdated ? new Date(live.lastUpdated).getTime() : Date.now(),
+            };
+          });
           if (live.activeTripId) {
             setActiveTripId(live.activeTripId);
           }
@@ -106,7 +113,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
 
   // Subscribe to real-time STOMP WebSocket for this bus and passenger requests
   useEffect(() => {
-    if (!selectedBus) return;
+    if (!selectedBus?.busNumber) return;
 
     wsService.connect();
 
@@ -228,27 +235,8 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
     }
   };
 
-  if (!selectedBus) {
-    return (
-      <div className="dashboard-layout">
-        <Sidebar role="student" />
-        <div className="main-content">
-          <main className="dashboard-body">
-            <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
-              <AlertTriangle size={48} style={{ color: 'var(--danger)', margin: '0 auto 16px' }} />
-              <h3>Bus Record Not Found</h3>
-              <button className="btn btn-primary" onClick={() => navigate('/student/dashboard')}>
-                Go to Dashboard
-              </button>
-            </div>
-          </main>
-        </div>
-      </div>
-    );
-  }
-
   // Calculate Freshness (Requirement 19 & 20)
-  const lastUpdatedMs = selectedBus.lastUpdatedTimestamp || now;
+  const lastUpdatedMs = selectedBus?.lastUpdatedTimestamp || now;
   const secondsElapsed = Math.max(0, Math.floor((now - lastUpdatedMs) / 1000));
   
   let freshnessState = 'LIVE';
@@ -317,7 +305,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
   const rawSpeedNum = typeof selectedBus?.speed === 'string' ? parseFloat(selectedBus.speed) : (selectedBus?.speed || 0);
   const displaySpeed = isNaN(rawSpeedNum) || rawSpeedNum <= 0 ? '0 km/h' : `${Math.round(rawSpeedNum)} km/h`;
 
-  // Dynamic ETA Calculation to ALL upcoming stops along the route
+  // Dynamic ETA Calculation to ALL upcoming stops along the route (HOOK CALLED UNCONDITIONALLY)
   const stopEstimates = useMemo(() => {
     if (!hasValidBusCoords || stops.length === 0) return [];
     
@@ -408,13 +396,33 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
     });
   }, [validBusLat, validBusLng, stops, nearestStopIndex, isCurrentlyAtStop, rawSpeedNum]);
 
+  // Fallback view if no bus found after all hooks execute
+  if (!selectedBus) {
+    return (
+      <div className="dashboard-layout">
+        <Sidebar role="student" />
+        <div className="main-content">
+          <main className="dashboard-body">
+            <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+              <AlertTriangle size={48} style={{ color: 'var(--danger)', margin: '0 auto 16px' }} />
+              <h3>Bus Record Not Found</h3>
+              <button className="btn btn-primary" onClick={() => navigate('/student/dashboard')}>
+                Go to Dashboard
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   // Specific selected stop ETA
   const targetStopEstimate = stopEstimates.find(s => s.name === selectedStop) || stopEstimates[stopEstimates.length - 1];
   let etaDisplay = 'ETA UNAVAILABLE';
 
   if (freshnessState === 'LOCATION_DELAYED') {
     etaDisplay = 'ETA UNAVAILABLE';
-  } else if (rawSpeedNum === 0 && selectedBus.status === 'NOT_STARTED') {
+  } else if (rawSpeedNum === 0 && selectedBus?.status === 'NOT_STARTED') {
     etaDisplay = targetStopEstimate ? `${targetStopEstimate.etaText} (Trip Scheduled)` : 'TRIP NOT STARTED';
   } else if (targetStopEstimate) {
     if (targetStopEstimate.status === 'CURRENT') {
