@@ -99,6 +99,22 @@ class WebSocketService {
     }
   }
 
+  subscribeToReminders(busNumber, callback) {
+    const topic = `/topic/bus/${busNumber}/reminders`;
+    this.subscriptions.set(topic, callback);
+    if (this.isConnected) {
+      return this._subscribeToTopic(topic, callback);
+    }
+  }
+
+  subscribeToStudentReminders(studentId, callback) {
+    const topic = `/topic/student/${studentId}/reminders`;
+    this.subscriptions.set(topic, callback);
+    if (this.isConnected) {
+      return this._subscribeToTopic(topic, callback);
+    }
+  }
+
   subscribeToAllBuses(callback) {
     const topic = '/topic/buses';
     this.subscriptions.set(topic, callback);

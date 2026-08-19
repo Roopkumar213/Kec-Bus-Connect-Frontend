@@ -227,12 +227,12 @@ export const api = {
     return handleResponse(res);
   },
 
-  // Driver Dedicated APIs
-  startDriverTrip: async (busId) => {
+  // Driver APIs
+  startDriverTrip: async (busId, direction = 'MORNING') => {
     const res = await fetch(`${API_BASE_URL}/driver/trips/start`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ busId }),
+      body: JSON.stringify({ busId, direction }),
     });
     return handleResponse(res);
   },
@@ -279,13 +279,14 @@ export const api = {
   },
 
   // Fallback Bus start/stop APIs
-  startTrip: async (busId) => {
+  startTrip: async (busId, direction = 'MORNING') => {
     try {
-      return await api.startDriverTrip(busId);
+      return await api.startDriverTrip(busId, direction);
     } catch {
-      const res = await fetch(`${API_BASE_URL}/buses/${busId}/start`, {
+      const res = await fetch(`${API_BASE_URL}/buses/${busId}/start?direction=${direction}`, {
         method: 'POST',
         headers: getHeaders(),
+        body: JSON.stringify({ direction }),
       });
       return handleResponse(res);
     }

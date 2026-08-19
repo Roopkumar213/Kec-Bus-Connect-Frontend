@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import MapView from '../components/MapView';
@@ -8,19 +8,23 @@ import {
   Compass, 
   Navigation, 
   Users, 
-  AlertTriangle,
-  ArrowLeft,
-  CheckCircle,
-  Activity,
-  Radio,
-  RefreshCw,
-  BellRing,
-  Check,
-  Circle,
-  AlertCircle
+  AlertTriangle, 
+  ArrowLeft, 
+  CheckCircle, 
+  Activity, 
+  Radio, 
+  RefreshCw, 
+  BellRing, 
+  Check, 
+  Circle, 
+  AlertCircle,
+  Volume2,
+  VolumeX,
+  Bell
 } from 'lucide-react';
 import { api } from '../services/api';
 import { wsService } from '../services/websocketService';
+import { notificationService } from '../services/notificationService';
 import { calculateDistanceKm } from '../services/mockLocationService';
 
 const CURRENT_STOP_RADIUS_METERS = 250;
@@ -37,15 +41,18 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTripId, setActiveTripId] = useState(null);
 
+  // Arrival Alert State
+  const [arrivalAlert, setArrivalAlert] = useState(null);
+  const reminderTriggeredRef = useRef(false);
+
   // Passenger Confirmation State
   const [passengerRequestReceived, setPassengerRequestReceived] = useState(false);
   const [passengerStatus, setPassengerStatus] = useState(null); // 'CONFIRMED_ON_BUS', 'NOT_ON_BUS'
   const [isSubmittingStatus, setIsSubmittingStatus] = useState(false);
   const [passengerMessage, setPassengerMessage] = useState('');
 
-  // Real-time ticking state to update freshness seconds
+  // Clock ticker for real-time second updates
   const [now, setNow] = useState(Date.now());
-
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -53,9 +60,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
 
   // Request browser Notification permissions if supported
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
-    }
+    notificationService.requestPermission();
   }, []);
 
   // Sync active bus from route params or fallback to KEC-07
@@ -91,6 +96,9 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
               status: live.status || prev.status,
               accuracy: live.accuracy,
               heading: live.heading,
+              direction: live.direction || prev.direction || 'MORNING',
+              startingPoint: live.startingPoint,
+              destination: live.destination,
               currentlyAtStop: live.currentlyAtStop,
               nextStop: live.nextStop,
               distanceToNextStopKm: live.distanceToNextStopKm,
@@ -111,7 +119,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
     fetchLiveDetails();
   }, [selectedBus?.id, selectedBus?.busNumber]);
 
-  // Subscribe to real-time STOMP WebSocket for this bus and passenger requests
+  // Subscribe to real-time STOMP WebSocket for this bus, passenger requests, and arrival reminders
   useEffect(() => {
     if (!selectedBus?.busNumber) return;
 
@@ -130,6 +138,9 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
             status: payload.status || prev.status,
             accuracy: payload.accuracy,
             heading: payload.heading,
+            direction: payload.direction || prev.direction || 'MORNING',
+            startingPoint: payload.startingPoint,
+            destination: payload.destination,
             currentlyAtStop: payload.currentlyAtStop,
             nextStop: payload.nextStop,
             distanceToNextStopKm: payload.distanceToNextStopKm,
@@ -149,18 +160,30 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
         if (payload.tripId) {
           setActiveTripId(payload.tripId);
         }
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('KEC BusConnect', {
-            body: 'Driver has requested passenger boarding confirmation for Bus ' + selectedBus.busNumber,
-            icon: '/favicon.svg'
-          });
-        }
+        notificationService.showArrivalAlert(
+          'KEC BusConnect Confirmation',
+          'Driver has requested passenger boarding confirmation for Bus ' + selectedBus.busNumber,
+          window.location.pathname
+        );
+      }
+    });
+
+    // 3. Arrival reminders stream
+    const unsubReminders = wsService.subscribeToReminders(selectedBus.busNumber, (payload) => {
+      if (payload && payload.etaMinutes !== undefined) {
+        setArrivalAlert(payload);
+        notificationService.showArrivalAlert(
+          '🔔 Bus Arriving Soon',
+          payload.message || `Bus ${selectedBus.busNumber} is approximately ${payload.etaMinutes} minutes away!`,
+          window.location.pathname
+        );
       }
     });
 
     return () => {
       if (unsubLocation && typeof unsubLocation.unsubscribe === 'function') unsubLocation.unsubscribe();
       if (unsubPassenger && typeof unsubPassenger.unsubscribe === 'function') unsubPassenger.unsubscribe();
+      if (unsubReminders && typeof unsubReminders.unsubscribe === 'function') unsubReminders.unsubscribe();
     };
   }, [selectedBus?.busNumber]);
 
@@ -261,8 +284,19 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
     return `${mins} min${mins > 1 ? 's' : ''} ago`;
   };
 
+  // Trip Direction
+  const tripDirection = selectedBus?.direction || (activeTripId?.includes('EVENING') ? 'EVENING' : 'MORNING');
+
+  // Ordered stops based on trip direction (Requirement 3: Reverse for Evening)
+  const rawStops = selectedBus?.stops || [];
+  const stops = useMemo(() => {
+    if (tripDirection === 'EVENING') {
+      return [...rawStops].reverse();
+    }
+    return rawStops;
+  }, [rawStops, tripDirection]);
+
   // Determine Stop Proximity (Requirement 8 & 9)
-  const stops = selectedBus?.stops || [];
   let nearestStopName = null;
   let nearestStopDistanceMeters = Infinity;
   let nearestStopIndex = -1;
@@ -305,12 +339,12 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
   const rawSpeedNum = typeof selectedBus?.speed === 'string' ? parseFloat(selectedBus.speed) : (selectedBus?.speed || 0);
   const displaySpeed = isNaN(rawSpeedNum) || rawSpeedNum <= 0 ? '0 km/h' : `${Math.round(rawSpeedNum)} km/h`;
 
-  // Dynamic ETA Calculation to ALL upcoming stops along the route (HOOK CALLED UNCONDITIONALLY)
+  // Pre-calculate stop-by-stop ETAs unconditionally at top level
   const stopEstimates = useMemo(() => {
-    if (!hasValidBusCoords || stops.length === 0) return [];
+    if (!stops || stops.length === 0) return [];
     
     // Use actual bus velocity or standard rural transit speed (28 km/h)
-    const effectiveSpeedKmh = rawSpeedNum > 0 ? rawSpeedNum : 28;
+    const effectiveSpeedKmh = (rawSpeedNum > 5) ? rawSpeedNum : 28;
     const targetNext = isCurrentlyAtStop ? nearestStopIndex + 1 : nearestStopIndex;
 
     return stops.map((stop, idx) => {
@@ -396,6 +430,22 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
     });
   }, [validBusLat, validBusLng, stops, nearestStopIndex, isCurrentlyAtStop, rawSpeedNum]);
 
+  // Local ETA-based arrival reminder trigger fallback
+  const targetStopEstimate = stopEstimates.find(s => s.name === selectedStop) || stopEstimates[stopEstimates.length - 1];
+
+  useEffect(() => {
+    if (targetStopEstimate && targetStopEstimate.status === 'UPCOMING' && targetStopEstimate.etaMinutes <= 10 && !reminderTriggeredRef.current && freshnessState === 'LIVE') {
+      reminderTriggeredRef.current = true;
+      const alertMsg = `${selectedBus?.busNumber || 'Bus'} is approximately ${targetStopEstimate.etaMinutes} minutes away from ${selectedStop || 'your stop'}. Prepare to board.`;
+      setArrivalAlert({
+        message: alertMsg,
+        etaMinutes: targetStopEstimate.etaMinutes,
+        stopName: selectedStop
+      });
+      notificationService.showArrivalAlert('🔔 Bus Arriving Soon!', alertMsg, window.location.pathname);
+    }
+  }, [targetStopEstimate, freshnessState, selectedBus?.busNumber, selectedStop]);
+
   // Fallback view if no bus found after all hooks execute
   if (!selectedBus) {
     return (
@@ -417,7 +467,6 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
   }
 
   // Specific selected stop ETA
-  const targetStopEstimate = stopEstimates.find(s => s.name === selectedStop) || stopEstimates[stopEstimates.length - 1];
   let etaDisplay = 'ETA UNAVAILABLE';
 
   if (freshnessState === 'LOCATION_DELAYED') {
@@ -447,9 +496,22 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
               <ArrowLeft size={18} />
             </Link>
             <div>
-              <h1 style={{ fontSize: '20px', fontWeight: 800 }}>Live Bus Tracking</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h1 style={{ fontSize: '20px', fontWeight: 800 }}>Live Bus Tracking</h1>
+                <span style={{
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  background: tripDirection === 'EVENING' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(37, 99, 235, 0.15)',
+                  color: tripDirection === 'EVENING' ? '#a855f7' : 'var(--primary)',
+                  border: `1px solid ${tripDirection === 'EVENING' ? 'rgba(168, 85, 247, 0.3)' : 'rgba(37, 99, 235, 0.3)'}`
+                }}>
+                  {tripDirection === 'EVENING' ? '🌆 EVENING TRIP: RETURNING HOME' : '🌅 MORNING TRIP: TO COLLEGE'}
+                </span>
+              </div>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                {selectedBus.busNumber} • {selectedBus.routeName || 'Attikuppam → KEC (via MDR87)'}
+                {selectedBus.busNumber} • {tripDirection === 'EVENING' ? 'KEC (Terminus) → Attikuppam' : (selectedBus.routeName || 'Attikuppam → KEC (via MDR87)')}
               </p>
             </div>
           </div>
@@ -475,6 +537,56 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
         {/* Dashboard Body */}
         <main className="dashboard-body">
           
+          {/* Automated 10-Minute Arrival Reminder Modal / Card */}
+          {arrivalAlert && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15))',
+              border: '2px solid var(--warning)',
+              borderRadius: '16px',
+              padding: '20px 24px',
+              marginBottom: '20px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '16px',
+              boxShadow: '0 8px 24px rgba(245, 158, 11, 0.2)',
+              animation: 'bounceIn 0.4s ease'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ padding: '12px', background: 'var(--warning)', color: 'white', borderRadius: '50%' }}>
+                  <Bell size={24} className="animate-bounce" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+                    🔔 Bus Arriving Soon! (~{arrivalAlert.etaMinutes} mins away)
+                  </h3>
+                  <p style={{ fontSize: '14px', color: 'var(--text-main)', margin: '4px 0 0', fontWeight: 600 }}>
+                    {arrivalAlert.message}
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => notificationService.playArrivalChime()}
+                  className="btn btn-secondary"
+                  style={{ padding: '8px 14px', fontSize: '13px', gap: '6px' }}
+                >
+                  <Volume2 size={16} /> Replay Chime
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setArrivalAlert(null)}
+                  className="btn btn-primary"
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 3-Minute GPS Delay Warning Banner */}
           {freshnessState === 'LOCATION_DELAYED' && (
             <div style={{
@@ -625,16 +737,16 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
               </p>
             </div>
 
-            {/* ETA to Boarding Point */}
+            {/* ETA to Boarding/Drop Point */}
             <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--primary)' }}>
               <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', textTransform: 'uppercase' }}>
-                ESTIMATED ARRIVAL (ETA)
+                {tripDirection === 'EVENING' ? 'ETA TO YOUR DROP STOP' : 'ESTIMATED ARRIVAL (ETA)'}
               </span>
               <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '4px', color: 'var(--text-main)' }}>
                 {etaDisplay}
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                To stop: <strong>{selectedStop || 'Destination'}</strong>
+                {tripDirection === 'EVENING' ? 'Drop stop: ' : 'Boarding stop: '}<strong>{selectedStop || (tripDirection === 'EVENING' ? 'Drop Location' : 'Attikuppam')}</strong>
               </p>
             </div>
 

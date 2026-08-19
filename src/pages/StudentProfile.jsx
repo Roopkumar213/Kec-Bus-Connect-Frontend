@@ -48,6 +48,9 @@ const boardingPinIcon = new L.DivIcon({
 const StudentProfile = ({ buses = [] }) => {
   const [studentInfo, setStudentInfo] = useState(null);
   const [boardingAddress, setBoardingAddress] = useState('');
+  const [eveningDropAddress, setEveningDropAddress] = useState('');
+  const [reminderMinutes, setReminderMinutes] = useState(10);
+  const [modalMode, setModalMode] = useState('BOARDING'); // 'BOARDING' | 'EVENING_DROP'
   const navigate = useNavigate();
 
   // Change Boarding Location Modal State
@@ -69,6 +72,7 @@ const StudentProfile = ({ buses = [] }) => {
         if (me && me.student) {
           currentStudent = me.student;
           setStudentInfo(me.student);
+          if (me.student.reminderMinutes) setReminderMinutes(me.student.reminderMinutes);
           localStorage.setItem('kec_current_user', JSON.stringify(me.student));
         }
       } catch (e) {
@@ -81,6 +85,7 @@ const StudentProfile = ({ buses = [] }) => {
           try {
             currentStudent = JSON.parse(savedUser);
             setStudentInfo(currentStudent);
+            if (currentStudent.reminderMinutes) setReminderMinutes(currentStudent.reminderMinutes);
           } catch {
             navigate('/student-login', { replace: true });
             return;
@@ -106,6 +111,25 @@ const StudentProfile = ({ buses = [] }) => {
             }
           } catch (err) {
             setBoardingAddress('Attikuppam (Origin) / MDR87 Corridor');
+          }
+        }
+      }
+
+      // Evening drop address
+      if (currentStudent && currentStudent.eveningDropLocation) {
+        const loc = currentStudent.eveningDropLocation;
+        const lat = loc.coordinates ? loc.coordinates[1] : loc.latitude;
+        const lng = loc.coordinates ? loc.coordinates[0] : loc.longitude;
+        if (lat != null && lng != null) {
+          try {
+            const geo = await api.reverseGeocode(lat, lng);
+            if (geo && (geo.formattedShort || geo.displayName)) {
+              setEveningDropAddress(geo.formattedShort || geo.displayName);
+            } else {
+              setEveningDropAddress(currentStudent.eveningDropAddress || 'Same as Morning Boarding Location');
+            }
+          } catch {
+            setEveningDropAddress(currentStudent.eveningDropAddress || 'Same as Morning Boarding Location');
           }
         }
       }
@@ -148,44 +172,58 @@ const StudentProfile = ({ buses = [] }) => {
       },
       (err) => {
         setIsLocating(false);
-        if (err.code === err.PERMISSION_DENIED) {
-          setLocationError('GPS permission was denied. Please allow location access in your browser settings.');
-        } else if (err.code === err.POSITION_UNAVAILABLE) {
-          setLocationError('Location position unavailable. Please ensure your device GPS is enabled.');
-        } else if (err.code === err.TIMEOUT) {
-          setLocationError('GPS detection timed out. Please retry.');
-        } else {
-          setLocationError(err.message || 'Error detecting GPS location.');
-        }
+        setLocationError(`GPS Lock Error: ${err.message}. Ensure location services are enabled.`);
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
-  // Confirm and save new boarding location to backend
-  const handleSaveBoardingLocation = async () => {
+  // Save new boarding / evening drop location to Spring Boot
+  const handleSaveLocation = async () => {
     if (!detectedCoords) return;
     setIsSaving(true);
     setLocationError('');
-    try {
-      await api.updateBoardingLocation({
-        latitude: detectedCoords.lat,
-        longitude: detectedCoords.lng,
-        accuracy: detectedAccuracy,
-        addressName: detectedAddress
-      });
+    setSaveSuccessMsg('');
 
-      setBoardingAddress(detectedAddress);
-      setSaveSuccessMsg('Boarding location successfully updated!');
+    try {
+      if (modalMode === 'EVENING_DROP') {
+        await api.updateEveningDropLocation({
+          latitude: detectedCoords.lat,
+          longitude: detectedCoords.lng,
+          accuracy: detectedAccuracy,
+          addressName: detectedAddress
+        });
+        setEveningDropAddress(detectedAddress);
+        setSaveSuccessMsg('Evening drop location successfully updated!');
+      } else {
+        await api.updateBoardingLocation({
+          latitude: detectedCoords.lat,
+          longitude: detectedCoords.lng,
+          accuracy: detectedAccuracy,
+          addressName: detectedAddress
+        });
+        setBoardingAddress(detectedAddress);
+        setSaveSuccessMsg('Morning boarding location successfully updated!');
+      }
+
       setTimeout(() => {
         setSaveSuccessMsg('');
         setIsModalOpen(false);
         setDetectedCoords(null);
       }, 1200);
     } catch (err) {
-      setLocationError(err.message || 'Failed to update boarding location.');
+      setLocationError(err.message || 'Failed to update location.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleUpdateReminder = async (minutes) => {
+    setReminderMinutes(minutes);
+    try {
+      await api.updateReminderSettings(minutes);
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -285,42 +323,98 @@ const StudentProfile = ({ buses = [] }) => {
                 </div>
 
                 <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '32px', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                  Transit Route & Boarding Point
+                  Transit Route & Stops
                 </h3>
 
+                {/* Morning Boarding Location */}
                 <div className="profile-row" style={{ alignItems: 'flex-start' }}>
                   <span className="profile-label">
                     <MapPin size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-bottom' }} />
-                    Assigned Boarding Point
+                    Morning Boarding Point
                   </span>
                   <div style={{ textAlign: 'right' }}>
                     <span className="profile-value" style={{ fontWeight: 700, color: 'var(--primary)', display: 'block' }}>
                       {boardingAddress || 'Attikuppam (Origin)'}
                     </span>
                     <button
-                      onClick={() => setIsModalOpen(true)}
+                      onClick={() => { setModalMode('BOARDING'); setIsModalOpen(true); }}
                       className="btn btn-secondary"
                       style={{ marginTop: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: 700, gap: '6px' }}
                     >
-                      <Navigation size={12} /> CHANGE BOARDING LOCATION
+                      <Navigation size={12} /> CHANGE MORNING BOARDING POINT
                     </button>
                   </div>
                 </div>
 
-                <div className="profile-row">
+                {/* Evening Drop Location */}
+                <div className="profile-row" style={{ alignItems: 'flex-start', marginTop: '12px' }}>
+                  <span className="profile-label">
+                    <MapPin size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-bottom', color: '#a855f7' }} />
+                    Evening Drop Location
+                  </span>
+                  <div style={{ textAlign: 'right' }}>
+                    <span className="profile-value" style={{ fontWeight: 700, color: '#a855f7', display: 'block' }}>
+                      {eveningDropAddress || boardingAddress || 'Same as Morning Boarding Point'}
+                    </span>
+                    <button
+                      onClick={() => { setModalMode('EVENING_DROP'); setIsModalOpen(true); }}
+                      className="btn btn-secondary"
+                      style={{ marginTop: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: 700, gap: '6px', borderColor: 'rgba(168, 85, 247, 0.4)', color: '#a855f7' }}
+                    >
+                      <Navigation size={12} /> CONFIGURE EVENING DROP POINT
+                    </button>
+                  </div>
+                </div>
+
+                {/* Arrival Reminder Setting */}
+                <div className="profile-row" style={{ alignItems: 'flex-start', marginTop: '12px' }}>
+                  <span className="profile-label">
+                    <Clock size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-bottom' }} />
+                    Evening Arrival Reminder
+                  </span>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
+                      Alert me before bus reaches my stop:
+                    </span>
+                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      {[5, 10, 15].map((mins) => (
+                        <button
+                          key={mins}
+                          type="button"
+                          onClick={() => handleUpdateReminder(mins)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid',
+                            borderColor: reminderMinutes === mins ? 'var(--primary)' : 'var(--border-color)',
+                            background: reminderMinutes === mins ? 'rgba(37, 99, 235, 0.15)' : 'var(--bg-secondary)',
+                            color: reminderMinutes === mins ? 'var(--primary)' : 'var(--text-secondary)',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {mins} mins {mins === 10 ? '(Default)' : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="profile-row" style={{ marginTop: '12px' }}>
                   <span className="profile-label">
                     <Compass size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-bottom' }} />
                     Assigned Bus & Route
                   </span>
                   <span className="profile-value">
-                    KEC-07 (Attikuppam → KEC via MDR87)
+                    KEC-07 (Attikuppam ⇄ KEC via MDR87)
                   </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Change Boarding Location Modal (Requirement 11) */}
+          {/* Change Location Modal */}
           {isModalOpen && (
             <div style={{
               position: 'fixed',
@@ -344,12 +438,16 @@ const StudentProfile = ({ buses = [] }) => {
                 </button>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <div style={{ padding: '8px', background: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary)', borderRadius: '8px' }}>
+                  <div style={{ padding: '8px', background: modalMode === 'EVENING_DROP' ? 'rgba(168, 85, 247, 0.1)' : 'rgba(37, 99, 235, 0.1)', color: modalMode === 'EVENING_DROP' ? '#a855f7' : 'var(--primary)', borderRadius: '8px' }}>
                     <MapPin size={20} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>Change Boarding Location</h3>
-                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0' }}>Capture your personal boarding pickup coordinates</p>
+                    <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>
+                      {modalMode === 'EVENING_DROP' ? 'Configure Evening Drop Location' : 'Change Morning Boarding Location'}
+                    </h3>
+                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                      {modalMode === 'EVENING_DROP' ? 'Set your preferred evening drop-off coordinates' : 'Capture your personal morning pickup coordinates'}
+                    </p>
                   </div>
                 </div>
 
@@ -389,7 +487,7 @@ const StudentProfile = ({ buses = [] }) => {
                 {detectedCoords && (
                   <div style={{ marginTop: '20px' }}>
                     <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px', marginBottom: '12px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Detected Pickup Place</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Detected Place</span>
                       <strong style={{ display: 'block', fontSize: '14px', color: 'var(--primary)', marginTop: '2px' }}>{detectedAddress}</strong>
                       <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>GPS Accuracy: ±{detectedAccuracy} meters</span>
                     </div>
@@ -414,19 +512,19 @@ const StudentProfile = ({ buses = [] }) => {
                           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         />
                         <Marker position={[Number(detectedCoords.lat), Number(detectedCoords.lng)]} icon={boardingPinIcon}>
-                          <Popup>Your Selected Boarding Point</Popup>
+                          <Popup>{modalMode === 'EVENING_DROP' ? 'Selected Evening Drop Point' : 'Selected Morning Boarding Point'}</Popup>
                         </Marker>
                         <Circle
                           center={[Number(detectedCoords.lat), Number(detectedCoords.lng)]}
                           radius={detectedAccuracy || 20}
-                          pathOptions={{ color: 'var(--primary)', fillColor: 'var(--primary)', fillOpacity: 0.15 }}
+                          pathOptions={{ color: modalMode === 'EVENING_DROP' ? '#a855f7' : 'var(--primary)', fillColor: modalMode === 'EVENING_DROP' ? '#a855f7' : 'var(--primary)', fillOpacity: 0.15 }}
                         />
                       </MapContainer>
                     </div>
 
                     <div style={{ display: 'flex', gap: '12px' }}>
                       <button
-                        onClick={handleSaveBoardingLocation}
+                        onClick={handleSaveLocation}
                         disabled={isSaving}
                         className="btn btn-primary"
                         style={{ flex: 1, padding: '12px', fontSize: '14px', fontWeight: 700 }}
