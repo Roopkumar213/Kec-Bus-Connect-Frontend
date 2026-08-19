@@ -4,5 +4,10 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "env": {
+    "VITE_API_URL": "https://kec-bus-connect-backend.onrender.com/api"
+  },
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist"
 }
