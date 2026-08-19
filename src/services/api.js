@@ -91,15 +91,15 @@ export const api = {
         localStorage.setItem('userEmail', cleanEmail);
         localStorage.setItem('kec_current_user', JSON.stringify(mockStudent));
         return mockData;
-      } else if (cleanEmail === 'admin@kec.ac.in' && cleanPass === 'admin123') {
+      } else if ((cleanEmail === 'admin@kec.ac.in' || cleanEmail === 'admin') && cleanPass === 'roop@210307') {
         const mockData = {
           success: true,
           token: 'mock-admin-jwt-' + Date.now(),
-          user: { email: 'admin@kec.ac.in', role: 'ADMIN' }
+          user: { email: cleanEmail, role: 'ADMIN' }
         };
         localStorage.setItem('token', mockData.token);
         localStorage.setItem('role', 'admin');
-        localStorage.setItem('userEmail', 'admin@kec.ac.in');
+        localStorage.setItem('userEmail', cleanEmail);
         return mockData;
       }
 
@@ -374,6 +374,41 @@ export const api = {
   },
 
   deleteBus: async (id) => {
+    const res = await fetch(`${API_BASE_URL}/admin/buses/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  // Aliases used by AdminDashboard and App
+  adminGetStudents: async () => {
+    const res = await fetch(`${API_BASE_URL}/admin/students`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  adminCreateBus: async (busData) => {
+    const res = await fetch(`${API_BASE_URL}/admin/buses`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(busData),
+    });
+    return handleResponse(res);
+  },
+
+  adminUpdateBus: async (id, busData) => {
+    const res = await fetch(`${API_BASE_URL}/admin/buses/${id}`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(busData),
+    });
+    return handleResponse(res);
+  },
+
+  adminDeleteBus: async (id) => {
     const res = await fetch(`${API_BASE_URL}/admin/buses/${id}`, {
       method: 'DELETE',
       headers: getHeaders(),

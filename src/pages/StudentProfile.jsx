@@ -189,7 +189,17 @@ const StudentProfile = ({ buses = [] }) => {
     }
   };
 
-  if (!studentInfo) return null;
+  if (!studentInfo) return (
+    <div className="dashboard-layout">
+      <Sidebar role="student" />
+      <div className="main-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>⏳</div>
+          <p style={{ fontWeight: 600 }}>Loading profile…</p>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="dashboard-layout">

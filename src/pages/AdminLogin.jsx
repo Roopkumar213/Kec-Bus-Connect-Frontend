@@ -4,8 +4,8 @@ import { Shield, Mail, Lock, LogIn, ArrowLeft, Radio } from 'lucide-react';
 import { api } from '../services/api';
 
 const AdminLogin = () => {
-  const [email, setEmail] = useState('driver@kec.ac.in');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('admin@kec.ac.in');
+  const [password, setPassword] = useState('Roop@210307');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
@@ -104,9 +104,9 @@ const AdminLogin = () => {
               <Mail size={16} style={{ position: 'absolute', left: '16px', top: '15px', color: 'var(--text-muted)' }} />
               <input
                 id="staff-email"
-                type="email"
+                type="text"
                 className="form-control"
-                placeholder="driver@kec.ac.in or admin@kec.ac.in"
+                placeholder="admin@kec.ac.in or driver@kec.ac.in"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 style={{ paddingLeft: '44px' }}

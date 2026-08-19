@@ -92,7 +92,17 @@ const StudentDashboard = ({ buses = [], onLogout }) => {
     };
   }, []);
 
-  if (!studentInfo) return null;
+  if (!studentInfo) return (
+    <div className="dashboard-layout">
+      <Sidebar role="student" onLogout={onLogout} />
+      <div className="main-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>⏳</div>
+          <p style={{ fontWeight: 600 }}>Loading your profile…</p>
+        </div>
+      </div>
+    </div>
+  );
 
   const assignedBus = (buses && buses.length > 0) ? buses[0] : {
     busNumber: 'KEC-07',
