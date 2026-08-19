@@ -34,12 +34,16 @@ const createStopIcon = (stop) => {
 };
 
 const RouteMap = ({ stops = [], path = [] }) => {
+  const validPath = Array.isArray(path)
+    ? path.filter(p => Array.isArray(p) && p.length >= 2 && !isNaN(Number(p[0])) && !isNaN(Number(p[1])))
+    : [];
+
   return (
     <>
       {/* Renders the route path connecting stops */}
-      {path && path.length > 1 && (
+      {validPath.length > 1 && (
         <Polyline 
-          positions={path} 
+          positions={validPath} 
           pathOptions={{
             color: 'var(--primary)',
             weight: 4,
@@ -50,40 +54,47 @@ const RouteMap = ({ stops = [], path = [] }) => {
       )}
 
       {/* Renders stops markers with detailed ETA popups */}
-      {stops.map((stop, index) => (
-        <Marker 
-          key={index} 
-          position={[stop.lat, stop.lng]} 
-          icon={createStopIcon(stop)}
-        >
-          <Popup>
-            <div style={{ padding: '4px', minWidth: '160px' }}>
-              <strong style={{ fontSize: '13px', display: 'block', color: 'var(--text-main)' }}>
-                {index + 1}. {stop.name}
-              </strong>
-              
-              {stop.status === 'CURRENT' ? (
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--success)', marginTop: '4px', display: 'block' }}>
-                  ● Bus is currently at this stop
-                </span>
-              ) : stop.status === 'PASSED' ? (
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
-                  ✓ Stop reached / passed
-                </span>
-              ) : (
-                <div style={{ marginTop: '6px', fontSize: '12px', borderTop: '1px solid #eee', paddingTop: '4px' }}>
-                  <div style={{ color: 'var(--primary)', fontWeight: 700 }}>
-                    ⏱ ETA: {stop.etaText || 'Calculating…'} {stop.clockTime && `(${stop.clockTime})`}
+      {Array.isArray(stops) && stops.map((stop, index) => {
+        if (!stop) return null;
+        const lat = Number(stop.lat ?? stop.latitude ?? (Array.isArray(stop.location?.coordinates) ? stop.location.coordinates[1] : null));
+        const lng = Number(stop.lng ?? stop.longitude ?? (Array.isArray(stop.location?.coordinates) ? stop.location.coordinates[0] : null));
+        if (isNaN(lat) || isNaN(lng) || !lat || !lng) return null;
+
+        return (
+          <Marker 
+            key={index} 
+            position={[lat, lng]} 
+            icon={createStopIcon(stop)}
+          >
+            <Popup>
+              <div style={{ padding: '4px', minWidth: '160px' }}>
+                <strong style={{ fontSize: '13px', display: 'block', color: 'var(--text-main)' }}>
+                  {index + 1}. {stop.name}
+                </strong>
+                
+                {stop.status === 'CURRENT' ? (
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--success)', marginTop: '4px', display: 'block' }}>
+                    ● Bus is currently at this stop
+                  </span>
+                ) : stop.status === 'PASSED' ? (
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
+                    ✓ Stop reached / passed
+                  </span>
+                ) : (
+                  <div style={{ marginTop: '6px', fontSize: '12px', borderTop: '1px solid #eee', paddingTop: '4px' }}>
+                    <div style={{ color: 'var(--primary)', fontWeight: 700 }}>
+                      ⏱ ETA: {stop.etaText || 'Calculating…'} {stop.clockTime && `(${stop.clockTime})`}
+                    </div>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginTop: '2px' }}>
+                      Distance: <strong>{stop.distanceKm != null ? `${stop.distanceKm} km` : '—'}</strong>
+                    </div>
                   </div>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginTop: '2px' }}>
-                    Distance: <strong>{stop.distanceKm != null ? `${stop.distanceKm} km` : '—'}</strong>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
     </>
   );
 };

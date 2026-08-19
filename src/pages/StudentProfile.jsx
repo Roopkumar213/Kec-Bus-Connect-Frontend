@@ -403,7 +403,8 @@ const StudentProfile = ({ buses = [] }) => {
 
                     <div style={{ height: '200px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', marginBottom: '20px' }}>
                       <MapContainer
-                        center={[detectedCoords.lat, detectedCoords.lng]}
+                        key={`profile-map-${detectedCoords.lat}-${detectedCoords.lng}`}
+                        center={[Number(detectedCoords.lat), Number(detectedCoords.lng)]}
                         zoom={15}
                         style={{ height: '100%', width: '100%' }}
                         scrollWheelZoom={false}
@@ -412,11 +413,11 @@ const StudentProfile = ({ buses = [] }) => {
                           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         />
-                        <Marker position={[detectedCoords.lat, detectedCoords.lng]} icon={boardingPinIcon}>
+                        <Marker position={[Number(detectedCoords.lat), Number(detectedCoords.lng)]} icon={boardingPinIcon}>
                           <Popup>Your Selected Boarding Point</Popup>
                         </Marker>
                         <Circle
-                          center={[detectedCoords.lat, detectedCoords.lng]}
+                          center={[Number(detectedCoords.lat), Number(detectedCoords.lng)]}
                           radius={detectedAccuracy || 20}
                           pathOptions={{ color: 'var(--primary)', fillColor: 'var(--primary)', fillOpacity: 0.15 }}
                         />

@@ -4,6 +4,8 @@ import initialBuses from './data/mockBuses';
 import { api } from './services/api';
 import { wsService } from './services/websocketService';
 
+import ErrorBoundary from './components/ErrorBoundary';
+
 // Import Pages
 import Landing from './pages/Landing';
 import StudentLogin from './pages/StudentLogin';
@@ -285,93 +287,95 @@ function App() {
   };
 
   return (
-    <Router>
-      <Routes>
-        {/* Landing Page */}
-        <Route path="/" element={<Landing />} />
+    <ErrorBoundary>
+      <Router>
+        <Routes>
+          {/* Landing Page */}
+          <Route path="/" element={<Landing />} />
 
-        {/* Authentication Pages */}
-        <Route path="/student-login" element={<StudentLogin />} />
-        <Route path="/student-signup" element={<StudentSignup />} />
-        <Route path="/admin-login" element={<AdminLogin />} />
-        <Route path="/driver-login" element={<AdminLogin />} />
+          {/* Authentication Pages */}
+          <Route path="/student-login" element={<StudentLogin />} />
+          <Route path="/student-signup" element={<StudentSignup />} />
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route path="/driver-login" element={<AdminLogin />} />
 
-        {/* Student Area */}
-        <Route
-          path="/student/dashboard"
-          element={
-            <RequireStudentAuth>
-              <StudentDashboard buses={buses} onLogout={handleLogout} />
-            </RequireStudentAuth>
-          }
-        />
-        <Route
-          path="/student/track/:busNumber"
-          element={
-            <RequireStudentAuth>
-              <BusTracking buses={buses} onRefreshLocation={handleRefreshLocation} />
-            </RequireStudentAuth>
-          }
-        />
-        <Route
-          path="/student/profile"
-          element={
-            <RequireStudentAuth>
-              <StudentProfile buses={buses} />
-            </RequireStudentAuth>
-          }
-        />
+          {/* Student Area */}
+          <Route
+            path="/student/dashboard"
+            element={
+              <RequireStudentAuth>
+                <StudentDashboard buses={buses} onLogout={handleLogout} />
+              </RequireStudentAuth>
+            }
+          />
+          <Route
+            path="/student/track/:busNumber"
+            element={
+              <RequireStudentAuth>
+                <BusTracking buses={buses} onRefreshLocation={handleRefreshLocation} />
+              </RequireStudentAuth>
+            }
+          />
+          <Route
+            path="/student/profile"
+            element={
+              <RequireStudentAuth>
+                <StudentProfile buses={buses} />
+              </RequireStudentAuth>
+            }
+          />
 
-        {/* Driver / Staff Area */}
-        <Route
-          path="/driver/dashboard"
-          element={
-            <RequireDriverAuth>
+          {/* Driver / Staff Area */}
+          <Route
+            path="/driver/dashboard"
+            element={
+              <RequireDriverAuth>
+                <LocationSharing buses={buses} onUpdateBusLocation={handleUpdateBusLocation} />
+              </RequireDriverAuth>
+            }
+          />
+          <Route
+            path="/student/share"
+            element={
               <LocationSharing buses={buses} onUpdateBusLocation={handleUpdateBusLocation} />
-            </RequireDriverAuth>
-          }
-        />
-        <Route
-          path="/student/share"
-          element={
-            <LocationSharing buses={buses} onUpdateBusLocation={handleUpdateBusLocation} />
-          }
-        />
+            }
+          />
 
-        {/* Admin Area */}
-        <Route
-          path="/admin/dashboard"
-          element={
-            <RequireAdminAuth>
-              <AdminDashboard
-                buses={buses}
-                onDeleteBus={handleDeleteBus}
-                onEditBus={handleEditBus}
-              />
-            </RequireAdminAuth>
-          }
-        />
-        <Route
-          path="/admin/add-bus"
-          element={
-            <RequireAdminAuth>
-              <AddBus onAddBus={handleAddBus} />
-            </RequireAdminAuth>
-          }
-        />
-        <Route
-          path="/admin/bus/:busNumber"
-          element={
-            <RequireAdminAuth>
-              <BusDetails buses={buses} onRefreshLocation={handleRefreshLocation} />
-            </RequireAdminAuth>
-          }
-        />
+          {/* Admin Area */}
+          <Route
+            path="/admin/dashboard"
+            element={
+              <RequireAdminAuth>
+                <AdminDashboard
+                  buses={buses}
+                  onDeleteBus={handleDeleteBus}
+                  onEditBus={handleEditBus}
+                />
+              </RequireAdminAuth>
+            }
+          />
+          <Route
+            path="/admin/add-bus"
+            element={
+              <RequireAdminAuth>
+                <AddBus onAddBus={handleAddBus} />
+              </RequireAdminAuth>
+            }
+          />
+          <Route
+            path="/admin/bus/:busNumber"
+            element={
+              <RequireAdminAuth>
+                <BusDetails buses={buses} onRefreshLocation={handleRefreshLocation} />
+              </RequireAdminAuth>
+            }
+          />
 
-        {/* Fallback routing */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+          {/* Fallback routing */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+    </ErrorBoundary>
   );
 }
 
