@@ -132,7 +132,8 @@ const StudentDashboard = ({ buses = [], onLogout }) => {
   };
 
   const displaySpeed = liveBusInfo?.speed != null && liveBusInfo.speed > 0 ? `${Math.round(liveBusInfo.speed)} km/h` : '0 km/h';
-  const displayAt = liveBusInfo?.currentlyAtStop ? `● CURRENTLY AT ${liveBusInfo.currentlyAtStop.toUpperCase()}` : (liveBusInfo?.nextStop ? `En route to ${liveBusInfo.nextStop}` : 'En route to KEC');
+  const displayAt = liveBusInfo?.currentlyAtStop ? `● CURRENTLY AT ${liveBusInfo.currentlyAtStop.toUpperCase()}` : (liveBusInfo?.nextStop ? `En route to ${liveBusInfo.nextStop}` : 'En route along corridor');
+  const isEveningTrip = liveBusInfo?.direction === 'EVENING';
 
   return (
     <div className="dashboard-layout">
@@ -172,7 +173,9 @@ const StudentDashboard = ({ buses = [], onLogout }) => {
               {renderAcademicDetailsBanner()}
               
               <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '10px 16px', borderRadius: 'var(--radius-sm)', backdropFilter: 'blur(4px)', minWidth: '150px' }}>
-                <span style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(255,255,255,0.7)', display: 'block' }}>Boarding Location</span>
+                <span style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(255,255,255,0.7)', display: 'block' }}>
+                  {isEveningTrip ? 'Evening Drop Location' : 'Morning Boarding Location'}
+                </span>
                 <span style={{ fontSize: '13px', fontWeight: 700 }}>{boardingLabel}</span>
               </div>
             </div>
@@ -182,21 +185,34 @@ const StudentDashboard = ({ buses = [], onLogout }) => {
           <div className="card animate-fade-in" style={{ marginBottom: '40px', borderLeft: '5px solid var(--primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
-                <h3 style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>
-                  Your Assigned Bus
-                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>
+                    Your Assigned Bus
+                  </h3>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    background: isEveningTrip ? 'rgba(168, 85, 247, 0.15)' : 'rgba(37, 99, 235, 0.15)',
+                    color: isEveningTrip ? '#a855f7' : 'var(--primary)',
+                    border: `1px solid ${isEveningTrip ? 'rgba(168, 85, 247, 0.3)' : 'rgba(37, 99, 235, 0.3)'}`
+                  }}>
+                    {isEveningTrip ? '🌆 Evening Bus • Returning Home' : '🌅 Morning Bus • To College'}
+                  </span>
+                </div>
                 <h4 style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>
                   KEC-07
                 </h4>
                 <p style={{ fontSize: '14px', color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
                   <MapPin size={14} style={{ color: 'var(--primary)' }} />
-                  Route: Attikuppam → KEC (via MDR87) • 39.8 km
+                  Route: {isEveningTrip ? 'KEC (Terminus) → Attikuppam' : 'Attikuppam → KEC (via MDR87)'} • 39.8 km
                 </p>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <BusStatus status={liveBusInfo?.status || assignedBus.status || 'RUNNING'} />
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                  Boarding: <strong>{boardingLabel}</strong>
+                  {isEveningTrip ? 'Drop Point: ' : 'Boarding: '}<strong>{boardingLabel}</strong>
                 </p>
               </div>
             </div>
@@ -216,7 +232,7 @@ const StudentDashboard = ({ buses = [], onLogout }) => {
               <div>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>NEXT STOP</span>
                 <strong style={{ display: 'block', fontSize: '13px', marginTop: '2px' }}>
-                  {liveBusInfo?.nextStop || 'Dase Gownur Crossing'}
+                  {liveBusInfo?.nextStop || (isEveningTrip ? 'Kuppam Town Center' : 'Dase Gownur Crossing')}
                 </strong>
               </div>
             </div>

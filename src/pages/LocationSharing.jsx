@@ -39,7 +39,8 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
   const [isRequestingPassenger, setIsRequestingPassenger] = useState(false);
   const [passengerRequestMessage, setPassengerRequestMessage] = useState('');
   
-  // Trip & Passenger State
+  // Trip Direction & Passenger State
+  const [tripDirection, setTripDirection] = useState('MORNING');
   const [activeTrip, setActiveTrip] = useState(null);
   const [passengerSummary, setPassengerSummary] = useState({
     confirmedCount: 0,
@@ -62,6 +63,7 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
         const trip = await api.getActiveDriverTrip(selectedBus.id);
         if (trip && trip.id) {
           setActiveTrip(trip);
+          if (trip.direction) setTripDirection(trip.direction);
           setIsTracking(true);
           const summary = await api.getPassengerSummary(trip.id);
           if (summary) setPassengerSummary(summary);
@@ -135,11 +137,11 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
     }
 
     try {
-      // 1. Create/Start active trip in backend
+      // 1. Create/Start active trip in backend with direction
       let startedTrip = null;
       if (selectedBus.id) {
         try {
-          startedTrip = await api.startTrip(selectedBus.id);
+          startedTrip = await api.startTrip(selectedBus.id, tripDirection);
           setActiveTrip(startedTrip);
           if (startedTrip && startedTrip.id) {
             const summary = await api.getPassengerSummary(startedTrip.id);
@@ -313,9 +315,60 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
                 <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '6px' }}>
                   Route: <strong>{selectedBus.routeName || selectedBus.route?.name || 'Attikuppam → KEC (via MDR87)'}</strong>
                 </p>
+
+                {/* Trip Direction Selection */}
+                <div style={{ marginTop: '14px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                    Select Trip Direction
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      disabled={isTracking}
+                      onClick={() => setTripDirection('MORNING')}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid',
+                        borderColor: tripDirection === 'MORNING' ? 'var(--primary)' : 'var(--border-color)',
+                        background: tripDirection === 'MORNING' ? 'rgba(37, 99, 235, 0.15)' : 'var(--bg-secondary)',
+                        color: tripDirection === 'MORNING' ? 'var(--primary)' : 'var(--text-secondary)',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        cursor: isTracking ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      🌅 MORNING TRIP
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isTracking}
+                      onClick={() => setTripDirection('EVENING')}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid',
+                        borderColor: tripDirection === 'EVENING' ? 'var(--primary)' : 'var(--border-color)',
+                        background: tripDirection === 'EVENING' ? 'rgba(37, 99, 235, 0.15)' : 'var(--bg-secondary)',
+                        color: tripDirection === 'EVENING' ? 'var(--primary)' : 'var(--text-secondary)',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        cursor: isTracking ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      🌆 EVENING TRIP
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '12px', padding: '10px 14px', borderRadius: '8px', background: 'var(--bg-secondary)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  <div><strong>Starting Point:</strong> {tripDirection === 'EVENING' ? 'Kuppam Engineering College (KEC - Terminus)' : 'Attikuppam (Origin)'}</div>
+                  <div><strong>Destination:</strong> {tripDirection === 'EVENING' ? 'Student Stops (Attikuppam)' : 'Kuppam Engineering College (KEC)'}</div>
+                </div>
+
                 {activeTrip && (
-                  <p style={{ color: 'var(--success)', fontSize: '13px', fontWeight: 600, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Activity size={14} /> Active Trip ID: {activeTrip.id}
+                  <p style={{ color: 'var(--success)', fontSize: '13px', fontWeight: 600, marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Activity size={14} /> Active Trip: {activeTrip.id} ({tripDirection})
                   </p>
                 )}
               </div>
@@ -330,7 +383,7 @@ const LocationSharing = ({ buses = [], onUpdateBusLocation }) => {
                     style={{ padding: '14px 28px', fontSize: '15px', fontWeight: 700, gap: '8px', boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)' }}
                   >
                     <Play size={18} fill="currentColor" />
-                    {isStarting ? 'Initiating GPS…' : 'START TRIP'}
+                    {isStarting ? 'Initiating GPS…' : tripDirection === 'EVENING' ? 'START EVENING TRIP' : 'START MORNING TRIP'}
                   </button>
                 ) : (
                   <>
