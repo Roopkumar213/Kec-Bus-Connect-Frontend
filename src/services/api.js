@@ -416,4 +416,46 @@ export const api = {
     });
     return handleResponse(res);
   },
+
+  // =====================================================
+  // Student Live Location Sharing APIs
+  // =====================================================
+
+  /**
+   * Checks if the student can share location for the given bus.
+   * Returns: { canStudentShare, currentSource, isCurrentSource, activeTripExists }
+   */
+  getLocationShareStatus: async (busId) => {
+    const res = await fetch(`${API_BASE_URL}/student/location/status?busId=${encodeURIComponent(busId)}`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  /**
+   * Sends a live GPS position update for the bus as an authorized student.
+   * Reuses the existing POST /api/buses/{busId}/location endpoint.
+   * The backend enforces priority (DRIVER > ADMIN > STUDENT).
+   */
+  updateStudentBusLocation: async (busId, locationData) => {
+    const res = await fetch(`${API_BASE_URL}/buses/${busId}/location`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(locationData),
+    });
+    return handleResponse(res);
+  },
+
+  /**
+   * Tells the backend to stop using this student as the location source.
+   */
+  stopStudentLocationSharing: async (busId) => {
+    const res = await fetch(`${API_BASE_URL}/student/location/stop?busId=${encodeURIComponent(busId)}`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
 };
+
