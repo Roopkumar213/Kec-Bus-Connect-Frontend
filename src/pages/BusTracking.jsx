@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import MapView from '../components/MapView';
@@ -50,6 +50,21 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
   const [passengerStatus, setPassengerStatus] = useState(null); // 'CONFIRMED_ON_BUS', 'NOT_ON_BUS'
   const [isSubmittingStatus, setIsSubmittingStatus] = useState(false);
   const [passengerMessage, setPassengerMessage] = useState('');
+
+  // ─── Student Location Sharing State ─────────────────────────────────────────
+  const userRole = localStorage.getItem('role') || '';
+  const isStudent = userRole === 'student';
+  const [locationShareStatus, setLocationShareStatus] = useState(null); // { canStudentShare, isCurrentSource, currentSource }
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareError, setShareError] = useState('');
+  const [shareSpeed, setShareSpeed] = useState(null);
+  const [shareLastSent, setShareLastSent] = useState(null);
+  const [shareInterrupted, setShareInterrupted] = useState(false);
+  const watchIdRef = useRef(null);
+  const lastSentRef = useRef(null);
+  const shareIntervalRef = useRef(null);
+  const interruptionTimerRef = useRef(null);
+  // ────────────────────────────────────────────────────────────────────────────
 
   // Clock ticker for real-time second updates
   const [now, setNow] = useState(Date.now());
@@ -145,6 +160,7 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
             nextStop: payload.nextStop,
             distanceToNextStopKm: payload.distanceToNextStopKm,
             lastUpdatedTimestamp: payload.lastUpdated ? new Date(payload.lastUpdated).getTime() : Date.now(),
+            sourceType: payload.sourceType || prev.sourceType,
           };
         });
         if (payload.activeTripId) {
@@ -194,6 +210,146 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
       localStorage.setItem(`kec_stop_${selectedBus.busNumber}`, stopName);
     }
   };
+
+  // ─── Student Location Sharing Handlers ──────────────────────────────────────
+
+  // Fetch location share status for this bus (student only)
+  useEffect(() => {
+    if (!isStudent || !selectedBus?.busNumber) return;
+    const busId = selectedBus.id || selectedBus.busNumber;
+    api.getLocationShareStatus(busId)
+      .then(s => setLocationShareStatus(s))
+      .catch(() => {});
+  }, [isStudent, selectedBus?.busNumber, selectedBus?.id]);
+
+  // Stop sharing: clear watchPosition, notify backend
+  const stopSharing = useCallback(async () => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (shareIntervalRef.current) {
+      clearTimeout(shareIntervalRef.current);
+      shareIntervalRef.current = null;
+    }
+    if (interruptionTimerRef.current) {
+      clearTimeout(interruptionTimerRef.current);
+      interruptionTimerRef.current = null;
+    }
+    setIsSharing(false);
+    setShareInterrupted(false);
+    const busId = selectedBus?.id || selectedBus?.busNumber;
+    if (busId) {
+      try { await api.stopStudentLocationSharing(busId); } catch (_) {}
+    }
+    // Refresh source status
+    if (busId) {
+      try {
+        const s = await api.getLocationShareStatus(busId);
+        setLocationShareStatus(s);
+      } catch (_) {}
+    }
+  }, [selectedBus?.id, selectedBus?.busNumber]);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+      if (shareIntervalRef.current) clearTimeout(shareIntervalRef.current);
+      if (interruptionTimerRef.current) clearTimeout(interruptionTimerRef.current);
+    };
+  }, []);
+
+  // Stop sharing when trip ends (activeTripId becomes null)
+  useEffect(() => {
+    if (isSharing && !activeTripId) {
+      stopSharing();
+    }
+  }, [activeTripId, isSharing, stopSharing]);
+
+  const startSharing = async () => {
+    setShareError('');
+    setShareInterrupted(false);
+
+    if (!navigator.geolocation) {
+      setShareError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    const busId = selectedBus?.id || selectedBus?.busNumber;
+    if (!busId) { setShareError('Bus ID not available.'); return; }
+
+    // Verify eligibility one more time
+    try {
+      const status = await api.getLocationShareStatus(busId);
+      setLocationShareStatus(status);
+      if (!status.canStudentShare && !status.isCurrentSource) {
+        if (status.currentSource === 'DRIVER') {
+          setShareError('Driver is actively sharing location. You cannot override the driver.');
+        } else if (status.currentSource === 'STUDENT') {
+          setShareError('Another passenger is already sharing location for this bus.');
+        } else if (!status.activeTripExists) {
+          setShareError('No active trip for this bus. Sharing is only available during an active trip.');
+        } else {
+          setShareError('You are not authorized to share location for this bus.');
+        }
+        return;
+      }
+    } catch (e) {
+      setShareError('Could not verify sharing eligibility. Please try again.');
+      return;
+    }
+
+    // Start GPS watch
+    setIsSharing(true);
+    lastSentRef.current = Date.now();
+
+    const sendPosition = async (pos) => {
+      const { latitude, longitude, accuracy, speed, heading } = pos.coords;
+      setShareSpeed(speed != null ? Math.round(speed * 3.6) : null); // m/s → km/h
+      setShareLastSent(Date.now());
+      lastSentRef.current = Date.now();
+      setShareInterrupted(false);
+
+      // Reset interruption timer: if no update in 40s → interrupted
+      if (interruptionTimerRef.current) clearTimeout(interruptionTimerRef.current);
+      interruptionTimerRef.current = setTimeout(() => setShareInterrupted(true), 40000);
+
+      try {
+        await api.updateStudentBusLocation(busId, { latitude, longitude, accuracy, speed: speed != null ? speed * 3.6 : null, heading });
+      } catch (err) {
+        if (err.message && (err.message.includes('Driver') || err.message.includes('passenger') || err.message.includes('override'))) {
+          setShareError(err.message);
+          stopSharing();
+        }
+        // Other transient errors: keep trying
+      }
+    };
+
+    const handleError = (err) => {
+      console.warn('GPS error during student sharing:', err.message);
+      setShareInterrupted(true);
+    };
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      sendPosition,
+      handleError,
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
+
+    // Set initial interruption timer
+    interruptionTimerRef.current = setTimeout(() => setShareInterrupted(true), 40000);
+
+    // Refresh source status after starting
+    setTimeout(async () => {
+      try {
+        const s = await api.getLocationShareStatus(busId);
+        setLocationShareStatus(s);
+      } catch (_) {}
+    }, 2000);
+  };
+
+  // ────────────────────────────────────────────────────────────────────────────
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -537,6 +693,107 @@ const BusTracking = ({ buses = [], onRefreshLocation }) => {
         {/* Dashboard Body */}
         <main className="dashboard-body">
           
+          {/* ─── Student Location Source & Sharing Panel ─────────────────────── */}
+          {isStudent && (
+            <div className="card animate-fade-in" style={{
+              marginBottom: '20px',
+              borderLeft: isSharing ? '4px solid var(--success)' : '4px solid var(--border-color)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                {/* Left: Source info + sharing status */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <Radio size={14} style={{ color: isSharing ? 'var(--success)' : 'var(--text-secondary)' }} />
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Location Source</span>
+                    {/* Source type badge */}
+                    {(() => {
+                      const src = isSharing ? 'STUDENT' : (locationShareStatus?.currentSource || selectedBus?.sourceType);
+                      if (!src) return null;
+                      const colors = {
+                        DRIVER: { bg: 'rgba(37, 99, 235, 0.12)', color: 'var(--primary)' },
+                        ADMIN: { bg: 'rgba(139, 92, 246, 0.12)', color: '#7c3aed' },
+                        STUDENT: { bg: 'rgba(16, 185, 129, 0.12)', color: 'var(--success)' },
+                      };
+                      const c = colors[src] || { bg: 'var(--bg-secondary)', color: 'var(--text-secondary)' };
+                      const labels = { DRIVER: '🚌 Driver', ADMIN: '⚙️ Admin', STUDENT: '👤 Passenger' };
+                      return (
+                        <span style={{
+                          padding: '2px 8px', borderRadius: '8px', fontSize: '10px',
+                          fontWeight: 800, background: c.bg, color: c.color,
+                          border: `1px solid ${c.color}33`
+                        }}>
+                          {labels[src] || src}
+                        </span>
+                      );
+                    })()}
+                  </div>
+
+                  {isSharing && !shareInterrupted && (
+                    <div style={{ fontSize: '13px', color: 'var(--success)', fontWeight: 600 }}>
+                      ● SHARING ACTIVE &nbsp;•&nbsp;
+                      Speed: {shareSpeed != null ? `${shareSpeed} km/h` : '—'} &nbsp;•&nbsp;
+                      Last sent: {shareLastSent ? `${Math.max(0, Math.floor((Date.now() - shareLastSent) / 1000))}s ago` : '—'}
+                    </div>
+                  )}
+                  {isSharing && shareInterrupted && (
+                    <div style={{ fontSize: '13px', color: 'var(--warning)', fontWeight: 600 }}>
+                      ⚠ LOCATION SHARING INTERRUPTED — Reopen the app to resume GPS.
+                    </div>
+                  )}
+                  {!isSharing && (
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      {locationShareStatus?.currentSource === 'DRIVER' ? 'Driver is sharing live GPS.' :
+                       locationShareStatus?.currentSource === 'ADMIN' ? 'Admin is managing bus location.' :
+                       locationShareStatus?.currentSource === 'STUDENT' && !locationShareStatus?.isCurrentSource ? 'Another passenger is sharing location.' :
+                       'You can help share the bus location if you are on board.'}
+                    </div>
+                  )}
+                  {shareError && (
+                    <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '4px', fontWeight: 600 }}>
+                      ⚠ {shareError}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: Share / Stop button */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                  {!isSharing ? (
+                    <button
+                      id="student-share-location-btn"
+                      onClick={startSharing}
+                      disabled={locationShareStatus?.currentSource === 'DRIVER' || locationShareStatus?.currentSource === 'ADMIN' || (locationShareStatus?.currentSource === 'STUDENT' && !locationShareStatus?.isCurrentSource)}
+                      className="btn btn-primary"
+                      style={{ padding: '8px 18px', fontSize: '13px', fontWeight: 700, gap: '8px', opacity:
+                        (locationShareStatus?.currentSource === 'DRIVER' || locationShareStatus?.currentSource === 'ADMIN' ||
+                        (locationShareStatus?.currentSource === 'STUDENT' && !locationShareStatus?.isCurrentSource)) ? 0.45 : 1 }}
+                    >
+                      <Navigation size={14} />
+                      SHARE BUS LOCATION
+                    </button>
+                  ) : (
+                    <button
+                      id="student-stop-sharing-btn"
+                      onClick={stopSharing}
+                      className="btn btn-secondary"
+                      style={{ padding: '8px 18px', fontSize: '13px', fontWeight: 700, gap: '8px',
+                        borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                    >
+                      <Circle size={14} style={{ fill: 'var(--danger)' }} />
+                      STOP SHARING
+                    </button>
+                  )}
+                  {isSharing && (
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'right', maxWidth: '200px' }}>
+                      Your location is being used to track {selectedBus.busNumber}.<br/>
+                      Keep location services enabled while sharing.
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          {/* ─────────────────────────────────────────────────────────────────── */}
+
           {/* Automated 10-Minute Arrival Reminder Modal / Card */}
           {arrivalAlert && (
             <div style={{
