@@ -1,0 +1,19 @@
+# Release Signing Configuration Example
+# Copy this file to "key.properties" in the android/ directory and fill in your actual keystore details.
+# DO NOT commit "key.properties" or your ".jks" keystore to Git.
+
+# Path to your release keystore file (.jks or .keystore)
+# Relative paths are evaluated from the android/ directory.
+storeFile=release.keystore
+
+# Keystore password
+storePassword=your_keystore_password
+
+# Key alias name
+keyAlias=your_key_alias
+
+# Key password
+keyPassword=your_key_password
+
+# Optional Google Maps API Key for production builds (if not defined in local.properties)
+# MAPS_API_KEY=AIzaSy...
