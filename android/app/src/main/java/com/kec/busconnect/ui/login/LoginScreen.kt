@@ -1,5 +1,6 @@
 package com.kec.busconnect.ui.login
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,12 +16,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kec.busconnect.R
 import com.kec.busconnect.data.model.LoginResponse
 import com.kec.busconnect.ui.components.ErrorBanner
 import com.kec.busconnect.ui.components.GlassCard
@@ -55,19 +58,11 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             // Header Logo & Branding
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .background(PrimaryBlue.copy(alpha = 0.2f), RoundedCornerShape(20.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.DirectionsBus,
-                    contentDescription = null,
-                    tint = PrimaryBlue,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
+            Image(
+                painter = painterResource(id = R.drawable.app_logo),
+                contentDescription = "KEC BusConnect Logo",
+                modifier = Modifier.size(80.dp)
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 

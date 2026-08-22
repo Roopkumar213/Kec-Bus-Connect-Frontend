@@ -89,6 +89,13 @@ fun BusTrackingScreen(
                     .padding(16.dp)
                     .verticalScroll(scrollState)
             ) {
+                if (uiState.errorMessage != null) {
+                    ErrorBanner(
+                        message = uiState.errorMessage!!,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
+
                 // 1. Direction Banner
                 Row(
                     horizontalArrangement = Arrangement.SpaceBetween,

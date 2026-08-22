@@ -165,6 +165,12 @@ class BusLocationForegroundService : Service() {
         val busId = activeBusId ?: return
         val busNumber = activeBusNumber ?: "Bus"
 
+        // Coordinate sanity check: discard invalid or 0,0 fixes
+        if (location.latitude !in -90.0..90.0 || location.longitude !in -180.0..180.0 || (location.latitude == 0.0 && location.longitude == 0.0)) {
+            Log.w(TAG, "Skipping invalid GPS fix: (${location.latitude}, ${location.longitude})")
+            return
+        }
+
         // Speed calculation: location.speed is in m/s, convert to km/h
         val speedKmh = if (location.hasSpeed()) (location.speed * 3.6).toDouble() else 0.0
         val heading = if (location.hasBearing()) location.bearing.toDouble() else null

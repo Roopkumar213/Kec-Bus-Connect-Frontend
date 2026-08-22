@@ -20,6 +20,16 @@ class AuthInterceptor(private val sessionManager: SessionManager) : Interceptor 
             newRequestBuilder.header("Authorization", "Bearer $token")
         }
 
-        return chain.proceed(newRequestBuilder.build())
+        val response = chain.proceed(newRequestBuilder.build())
+
+        // If backend returns 401 Unauthorized for an authenticated endpoint, clean up session
+        if (response.code == 401 && !token.isNullOrBlank()) {
+            val path = originalRequest.url.encodedPath
+            if (!path.contains("/auth/login") && !path.contains("/auth/student/signup")) {
+                sessionManager.clearSession()
+            }
+        }
+
+        return response
     }
 }
