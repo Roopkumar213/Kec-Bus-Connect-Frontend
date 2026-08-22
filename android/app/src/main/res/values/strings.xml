@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">KEC BusConnect</string>
+    <string name="location_service_channel_name">Bus Location Sharing</string>
+    <string name="location_service_channel_desc">Active while sharing live bus GPS location with passengers</string>
+    <string name="reminder_channel_name">Trip Arrival Reminders</string>
+    <string name="reminder_channel_desc">Alerts when your bus is approaching your stop</string>
+</resources>

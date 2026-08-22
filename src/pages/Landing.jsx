@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Navigation, Compass, CheckCircle2, Shield, Calendar, Users } from 'lucide-react';
+import { MapPin, Navigation, Compass, CheckCircle2, Shield, Calendar, Users, Smartphone, Download, QrCode } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -27,6 +27,7 @@ const createPreviewIcon = () => {
     `,
     iconSize: [36, 36],
     iconAnchor: [18, 18],
+    popupAnchor: [0, -18]
   });
 };
 
@@ -49,14 +50,20 @@ const Landing = () => {
             <p>
               Track <strong>Bus KEC-07</strong> live on MDR87 route from Attikuppam through Singasamudram and Kangundhi directly to Kuppam Engineering College (39.8 km).
             </p>
-            <div className="hero-buttons">
+            <div className="hero-buttons" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
               <Link to="/student-login" className="btn btn-primary btn-lg">
                 <Navigation size={18} />
                 Track Bus KEC-07
               </Link>
-              <Link to="/student-login" className="btn btn-secondary btn-lg">
-                Student Login
-              </Link>
+              <a 
+                href="/downloads/kec-busconnect.apk" 
+                download="KEC-BusConnect.apk"
+                className="btn btn-secondary btn-lg"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Smartphone size={18} />
+                Download App (.APK)
+              </a>
             </div>
           </div>
 
@@ -196,6 +203,85 @@ const Landing = () => {
             <Link to="/student-login" className="btn btn-primary" style={{ width: '100%', marginTop: '24px' }}>
               Get Started
             </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Android App Download Section */}
+      <section className="features-section" id="download-app" style={{ background: 'linear-gradient(135deg, rgba(30, 58, 138, 0.05) 0%, rgba(59, 130, 246, 0.1) 100%)', borderBottom: '1px solid var(--border-color)' }}>
+        <div className="container" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '48px', alignItems: 'center' }}>
+          <div>
+            <span className="badge badge-primary" style={{ marginBottom: '16px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Smartphone size={14} /> Android Direct Install
+            </span>
+            <h2 style={{ fontSize: '32px', fontWeight: 800, marginBottom: '16px' }}>
+              Download KEC BusConnect App
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '16px', lineHeight: '1.6', marginBottom: '24px' }}>
+              Get real-time bus tracking, instant stop notifications, and driver GPS sharing directly on your Android phone. Fast, battery-optimized, and free for all KEC students and staff.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <CheckCircle2 size={20} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong>Live GPS & Stop ETA:</strong> Track Bus KEC-07 and other college transit lines seamlessly.
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <CheckCircle2 size={20} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong>Driver & Student Portals:</strong> One-tap location broadcasting for authorized bus coordinators.
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <CheckCircle2 size={20} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong>Encrypted & Direct:</strong> Secure HTTPS communication directly with campus servers.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center' }}>
+              <a 
+                href="/downloads/kec-busconnect.apk" 
+                download="KEC-BusConnect.apk"
+                className="btn btn-primary btn-lg"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', padding: '14px 28px' }}
+              >
+                <Download size={20} />
+                Download Android APK (v1.0.0)
+              </a>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Size: ~1.8 MB • Android 8.0+
+              </span>
+            </div>
+          </div>
+
+          {/* QR Code & Fast Install Card */}
+          <div className="card" style={{ padding: '32px', textAlign: 'center', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)' }}>
+            <div style={{ display: 'inline-flex', padding: '12px', background: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-md)', marginBottom: '20px' }}>
+              <img 
+                src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://kec-bus-connect.vercel.app/downloads/kec-busconnect.apk" 
+                alt="Scan to Download KEC BusConnect APK"
+                style={{ width: '180px', height: '180px', display: 'block' }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            </div>
+            <h4 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '6px' }}>Scan QR to Download on Mobile</h4>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+              Point your smartphone camera to scan & download the APK directly.
+            </p>
+            <div style={{ textAlign: 'left', background: 'var(--bg-app)', padding: '12px 16px', borderRadius: 'var(--radius-md)', fontSize: '12px', color: 'var(--text-muted)' }}>
+              <strong>Quick Install Tip:</strong>
+              <ol style={{ paddingLeft: '18px', marginTop: '6px', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <li>Tap <em>Download anyway</em> if prompted by your browser.</li>
+                <li>Enable <em>Allow from this source</em> in phone settings.</li>
+                <li>Tap <em>Install</em> to launch KEC BusConnect!</li>
+              </ol>
+            </div>
           </div>
         </div>
       </section>

@@ -17,6 +17,27 @@ dist-ssr
 # Backend Subdirectory (managed in separate repository)
 backend/
 
+# Android
+android/.gradle/
+android/local.properties
+android/key.properties
+android/app/build/
+android/.idea/
+android/*.iml
+android/captures/
+android/.externalNativeBuild
+android/.cxx
+android/google-services.json
+android/app/google-services.json
+
+# Keystore & Signing Secrets
+*.jks
+*.keystore
+*.p12
+*.bks
+key.properties
+local.properties
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -27,3 +48,4 @@ backend/
 *.njsproj
 *.sln
 *.sw?
+
