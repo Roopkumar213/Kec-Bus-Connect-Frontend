@@ -17,10 +17,15 @@ data class RouteDto(
 
 data class StopDto(
     @SerializedName("name") val name: String,
-    @SerializedName("sequence") val sequence: Int?,
-    @SerializedName("location") val location: GeoPointDto?,
-    @SerializedName("distanceFromOriginKm") val distanceFromOriginKm: Double?
+    @SerializedName("sequence") val sequence: Int? = 1,
+    @SerializedName("location") val location: GeoPointDto? = null,
+    @SerializedName("latitude") val directLat: Double? = null,
+    @SerializedName("longitude") val directLng: Double? = null,
+    @SerializedName("lat") val shortLat: Double? = null,
+    @SerializedName("lng") val shortLng: Double? = null,
+    @SerializedName("landmark") val landmark: String? = null,
+    @SerializedName("distanceFromOriginKm") val distanceFromOriginKm: Double? = null
 ) {
-    val latitude: Double? get() = location?.latitude
-    val longitude: Double? get() = location?.longitude
+    val latitude: Double? get() = directLat ?: shortLat ?: location?.latitude
+    val longitude: Double? get() = directLng ?: shortLng ?: location?.longitude
 }
