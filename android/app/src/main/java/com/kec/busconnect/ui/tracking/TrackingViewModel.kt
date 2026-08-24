@@ -139,7 +139,7 @@ class TrackingViewModel(
         val etaMin = (distKm / speedKmh) * 60.0
 
         val alert = if (distKm <= 2.0 || etaMin <= 10.0) {
-            "⚠️ Bus ${_uiState.value.busNumber} is approaching ${stop.name} (~${String.format("%.1f", distKm)} km, ~${etaMin.toInt()} min)"
+            "⚠️ Bus ${_uiState.value.busNumber} is approaching ${stop.name} (~${String.format(java.util.Locale.US, "%.1f", distKm)} km, ~${etaMin.toInt()} min)"
         } else null
 
         _uiState.value = _uiState.value.copy(

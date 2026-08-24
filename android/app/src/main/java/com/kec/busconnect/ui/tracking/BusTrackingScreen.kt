@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -37,7 +38,6 @@ fun BusTrackingScreen(
     val context = LocalContext.current
 
     var showShareConfirmDialog by remember { mutableStateOf(false) }
-    var stopDropdownExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(busNumber) {
         viewModel.startTracking(busNumber)
@@ -161,65 +161,58 @@ fun BusTrackingScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 4. Boarding Stop Selector & Live Proximity Card
+            var showStopDialog by remember { mutableStateOf(false) }
+
             GlassCard {
-                Text(
-                    text = "SELECT YOUR BOARDING / DROP STOP",
-                    fontSize = 10.sp,
-                    color = TextMuted,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                ExposedDropdownMenuBox(
-                    expanded = stopDropdownExpanded,
-                    onExpandedChange = { stopDropdownExpanded = !stopDropdownExpanded }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showStopDialog = true }
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = uiState.selectedStop?.name ?: "Select Stop",
-                        onValueChange = {},
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stopDropdownExpanded) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = DarkCardBorder,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedContainerColor = DarkSurface,
-                            unfocusedContainerColor = DarkSurface
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
-                    )
-
-                    ExposedDropdownMenu(
-                        expanded = stopDropdownExpanded,
-                        onDismissRequest = { stopDropdownExpanded = false },
-                        modifier = Modifier.background(DarkSurface)
-                    ) {
-                        uiState.stops.forEach { stop ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(text = stop.name, color = TextPrimary, fontWeight = FontWeight.Medium)
-                                        if (stop.landmark != null) {
-                                            Text(text = stop.landmark!!, color = TextMuted, fontSize = 11.sp)
-                                        }
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.selectStop(stop.name)
-                                    stopDropdownExpanded = false
-                                }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "YOUR BOARDING / DROP STOP",
+                            fontSize = 10.sp,
+                            color = TextMuted,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = uiState.selectedStop?.name ?: "Attikuppam (Origin)",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        if (uiState.selectedStop?.landmark != null) {
+                            Text(
+                                text = uiState.selectedStop!!.landmark!!,
+                                fontSize = 12.sp,
+                                color = TextSecondary
                             )
                         }
                     }
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(PrimaryBlue.copy(alpha = 0.15f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = "Change Stop",
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -228,7 +221,7 @@ fun BusTrackingScreen(
                     Column {
                         Text(text = "DISTANCE TO STOP", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
                         Text(
-                            text = uiState.distanceToSelectedStopKm?.let { "${String.format("%.1f", it)} km" } ?: "-- km",
+                            text = uiState.distanceToSelectedStopKm?.let { "${String.format(java.util.Locale.US, "%.1f", it)} km" } ?: "-- km",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryBlue
@@ -245,6 +238,63 @@ fun BusTrackingScreen(
                         )
                     }
                 }
+            }
+
+            if (showStopDialog) {
+                AlertDialog(
+                    onDismissRequest = { showStopDialog = false },
+                    title = { Text("Select Stop", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 360.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            uiState.stops.forEachIndexed { idx, stop ->
+                                val isSelected = stop.name == uiState.selectedStop?.name
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) PrimaryBlue.copy(alpha = 0.15f) else DarkSurface)
+                                        .clickable {
+                                            viewModel.selectStop(stop.name)
+                                            showStopDialog = false
+                                        }
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .background(if (isSelected) PrimaryBlue else DarkSurfaceVariant, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(text = "${idx + 1}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = stop.name, color = if (isSelected) PrimaryBlue else TextPrimary, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                        if (stop.landmark != null) {
+                                            Text(text = stop.landmark!!, color = TextMuted, fontSize = 11.sp)
+                                        }
+                                    }
+                                    if (isSelected) {
+                                        Icon(Icons.Default.Check, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showStopDialog = false }) {
+                            Text("Close", color = PrimaryBlue)
+                        }
+                    },
+                    containerColor = DarkSurface
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
