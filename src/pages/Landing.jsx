@@ -253,7 +253,7 @@ const Landing = () => {
                 Download Android APK (v1.0.0)
               </a>
               <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                Size: ~1.8 MB • Android 8.0+
+                Size: ~18 MB • Android 8.0+ (Native Jetpack Compose)
               </span>
             </div>
           </div>
@@ -262,7 +262,7 @@ const Landing = () => {
           <div className="card" style={{ padding: '32px', textAlign: 'center', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)' }}>
             <div style={{ display: 'inline-flex', padding: '12px', background: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-md)', marginBottom: '20px' }}>
               <img 
-                src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://kec-bus-connect.vercel.app/downloads/kec-busconnect.apk" 
+                src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://kecbusconnect.netlify.app/downloads/kec-busconnect.apk" 
                 alt="Scan to Download KEC BusConnect APK"
                 style={{ width: '180px', height: '180px', display: 'block' }}
                 onError={(e) => {
