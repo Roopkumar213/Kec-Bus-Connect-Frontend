@@ -50,7 +50,72 @@ class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
         }
     }
 
+    val signupSuccessMessage = MutableStateFlow<String?>(null)
+    val signupErrorMessage = MutableStateFlow<String?>(null)
+    val isSigningUp = MutableStateFlow(false)
+
+    fun signupStudent(
+        fullName: String,
+        studentId: String,
+        email: String,
+        mobile: String,
+        collegeType: String,
+        program: String,
+        department: String?,
+        academicYear: Int,
+        section: String,
+        batch: String,
+        boardingLat: Double,
+        boardingLng: Double,
+        pass: String,
+        onSuccess: () -> Unit
+    ) {
+        if (fullName.isBlank() || studentId.isBlank() || email.isBlank() || mobile.isBlank() || pass.length < 6) {
+            signupErrorMessage.value = "Please fill in all required fields. Password must be at least 6 characters."
+            return
+        }
+
+        isSigningUp.value = true
+        signupErrorMessage.value = null
+        signupSuccessMessage.value = null
+
+        viewModelScope.launch {
+            val req = com.kec.busconnect.data.model.SignupRequestDto(
+                fullName = fullName.trim(),
+                studentId = studentId.trim().uppercase(),
+                email = email.trim().lowercase(),
+                mobile = mobile.trim(),
+                collegeType = collegeType,
+                program = program,
+                department = department,
+                academicYear = academicYear,
+                section = section,
+                batch = batch,
+                boardingLocation = com.kec.busconnect.data.model.SignupBoardingLocationDto(
+                    latitude = boardingLat,
+                    longitude = boardingLng,
+                    accuracy = 10.0
+                ),
+                assignedBus = "KEC-07",
+                assignedRoute = "Attikuppam → KEC (via MDR87)",
+                password = pass.trim()
+            )
+
+            val result = authRepository.signupStudent(req)
+            isSigningUp.value = false
+            result.onSuccess { msg ->
+                signupSuccessMessage.value = msg
+                emailInput.value = email.trim()
+                onSuccess()
+            }.onFailure { err ->
+                signupErrorMessage.value = err.message ?: "Signup failed. Please check your information."
+            }
+        }
+    }
+
     fun resetState() {
         _uiState.value = LoginUiState.Idle
+        signupErrorMessage.value = null
+        signupSuccessMessage.value = null
     }
 }

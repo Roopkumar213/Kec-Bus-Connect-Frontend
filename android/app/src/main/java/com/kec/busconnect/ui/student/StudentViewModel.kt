@@ -113,6 +113,30 @@ class StudentViewModel(
         }
     }
 
+    fun updateBoardingStop(stopName: String, lat: Double, lng: Double) {
+        viewModelScope.launch {
+            val current = _uiState.value.student ?: return@launch
+            val updated = current.copy(
+                assignedRoute = stopName,
+                boardingLocation = com.kec.busconnect.data.model.GeoPointDto(
+                    coordinates = listOf(lng, lat)
+                )
+            )
+            studentRepository.updateBoardingLocation(lat, lng)
+            studentRepository.updateProfile(updated)
+            _uiState.value = _uiState.value.copy(student = updated)
+        }
+    }
+
+    fun updateReminderMinutes(minutes: Int) {
+        viewModelScope.launch {
+            val current = _uiState.value.student ?: return@launch
+            val updated = current.copy(reminderMinutes = minutes)
+            studentRepository.updateProfile(updated)
+            _uiState.value = _uiState.value.copy(student = updated)
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         pollingJob?.cancel()

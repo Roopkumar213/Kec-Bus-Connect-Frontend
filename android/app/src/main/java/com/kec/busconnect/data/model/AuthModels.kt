@@ -59,3 +59,26 @@ data class MeResponseDto(
     @SerializedName("assignedBus") val assignedBus: BusDto?,
     @SerializedName("assignedRoute") val assignedRoute: RouteDto?
 )
+
+data class SignupRequestDto(
+    @SerializedName("fullName") val fullName: String,
+    @SerializedName("studentId") val studentId: String,
+    @SerializedName("email") val email: String,
+    @SerializedName("mobile") val mobile: String,
+    @SerializedName("collegeType") val collegeType: String,
+    @SerializedName("program") val program: String,
+    @SerializedName("department") val department: String? = null,
+    @SerializedName("academicYear") val academicYear: Int,
+    @SerializedName("section") val section: String? = "A",
+    @SerializedName("batch") val batch: String? = "2023 - 2027",
+    @SerializedName("boardingLocation") val boardingLocation: SignupBoardingLocationDto,
+    @SerializedName("assignedBus") val assignedBus: String? = "KEC-07",
+    @SerializedName("assignedRoute") val assignedRoute: String? = "Attikuppam → KEC (via MDR87)",
+    @SerializedName("password") val password: String
+)
+
+data class SignupBoardingLocationDto(
+    @SerializedName("latitude") val latitude: Double,
+    @SerializedName("longitude") val longitude: Double,
+    @SerializedName("accuracy") val accuracy: Double? = 10.0
+)

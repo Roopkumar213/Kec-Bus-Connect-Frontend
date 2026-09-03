@@ -48,6 +48,7 @@ fun LoginScreen(
     val scrollState = rememberScrollState()
 
     var showServerConfigDialog by remember { mutableStateOf(false) }
+    var showSignupDialog by remember { mutableStateOf(false) }
     var customServerUrlInput by remember { mutableStateOf(ApiClient.getBaseUrl()) }
 
     LaunchedEffect(uiState) {
@@ -241,6 +242,23 @@ fun LoginScreen(
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Student Signup Button
+                OutlinedButton(
+                    onClick = { showSignupDialog = true },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryBlue),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Text(
+                        text = "NEW STUDENT? CREATE ACCOUNT",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -253,6 +271,103 @@ fun LoginScreen(
                 textAlign = TextAlign.Center
             )
         }
+    }
+
+    val signupSuccess by viewModel.signupSuccessMessage.collectAsState()
+    val signupError by viewModel.signupErrorMessage.collectAsState()
+    val isSigningUp by viewModel.isSigningUp.collectAsState()
+
+    if (showSignupDialog) {
+        var newFullName by remember { mutableStateOf("") }
+        var newStudentId by remember { mutableStateOf("") }
+        var newEmail by remember { mutableStateOf("") }
+        var newMobile by remember { mutableStateOf("") }
+        var newCollegeType by remember { mutableStateOf("ENGINEERING") }
+        var newProgram by remember { mutableStateOf("BTECH") }
+        var newDept by remember { mutableStateOf("CSE") }
+        var newYear by remember { mutableStateOf(1) }
+        var newSection by remember { mutableStateOf("A") }
+        var newBatch by remember { mutableStateOf("2023 - 2027") }
+        var newPassword by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showSignupDialog = false },
+            title = { Text("Student Registration", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    if (signupError != null) {
+                        Text("⚠ $signupError", color = DangerRose, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+                    }
+                    if (signupSuccess != null) {
+                        Text("✓ $signupSuccess", color = SuccessEmerald, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+                    }
+
+                    OutlinedTextField(value = newFullName, onValueChange = { newFullName = it }, label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(value = newStudentId, onValueChange = { newStudentId = it }, label = { Text("Student Roll ID (e.g. 23KEC501)") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(value = newEmail, onValueChange = { newEmail = it }, label = { Text("Email (@kec.ac.in)") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(value = newMobile, onValueChange = { newMobile = it }, label = { Text("Mobile Number (10 digits)") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Program selection
+                    Text("College & Program:", fontSize = 12.sp, color = TextMuted)
+                    Row(modifier = Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = newProgram == "BTECH", onClick = { newCollegeType = "ENGINEERING"; newProgram = "BTECH"; newDept = "CSE" }, label = { Text("B.Tech") })
+                        FilterChip(selected = newProgram == "BCA", onClick = { newCollegeType = "DEGREE"; newProgram = "BCA"; newDept = "BCA" }, label = { Text("BCA") })
+                        FilterChip(selected = newProgram == "DIPLOMA", onClick = { newCollegeType = "DIPLOMA"; newProgram = "DIPLOMA"; newDept = "ECE" }, label = { Text("Diploma") })
+                        FilterChip(selected = newProgram == "MBA", onClick = { newCollegeType = "MBA"; newProgram = "MBA"; newDept = "MBA" }, label = { Text("MBA") })
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(value = newDept, onValueChange = { newDept = it }, label = { Text("Department (e.g. CSE, ECE, AI_ML)") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(value = newPassword, onValueChange = { newPassword = it }, label = { Text("Password (min 6 chars)") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.signupStudent(
+                            fullName = newFullName,
+                            studentId = newStudentId,
+                            email = newEmail,
+                            mobile = newMobile,
+                            collegeType = newCollegeType,
+                            program = newProgram,
+                            department = newDept,
+                            academicYear = newYear,
+                            section = newSection,
+                            batch = newBatch,
+                            boardingLat = 12.884713,
+                            boardingLng = 78.479812,
+                            pass = newPassword,
+                            onSuccess = { showSignupDialog = false }
+                        )
+                    },
+                    enabled = !isSigningUp,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                ) {
+                    if (isSigningUp) {
+                        CircularProgressIndicator(color = TextPrimary, modifier = Modifier.size(18.dp))
+                    } else {
+                        Text("Register")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignupDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = DarkSurface
+        )
     }
 
     // Server Environment Settings Dialog

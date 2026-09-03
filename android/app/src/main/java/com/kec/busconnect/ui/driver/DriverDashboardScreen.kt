@@ -30,6 +30,16 @@ fun DriverDashboardScreen(
     val context = LocalContext.current
     var selectedDirection by remember { mutableStateOf("MORNING") }
 
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val locationGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (locationGranted) {
+            viewModel.startTrip(selectedDirection)
+        }
+    }
+
     // Start / Stop Foreground Service whenever Driver starts or stops trip
     LaunchedEffect(uiState.isSharingLocation) {
         if (uiState.isSharingLocation) {
@@ -124,7 +134,16 @@ fun DriverDashboardScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
-                        onClick = { viewModel.startTrip(selectedDirection) },
+                        onClick = {
+                            val perms = mutableListOf(
+                                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                android.Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            permissionLauncher.launch(perms.toTypedArray())
+                        },
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = SuccessEmerald),
                         modifier = Modifier

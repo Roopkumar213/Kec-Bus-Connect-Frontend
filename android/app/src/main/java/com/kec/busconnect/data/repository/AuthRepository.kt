@@ -61,6 +61,24 @@ class AuthRepository(
         }
     }
 
+    suspend fun signupStudent(request: com.kec.busconnect.data.model.SignupRequestDto): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val response = apiService.signup(request)
+            if (response.isSuccessful) {
+                Result.success(response.body()?.message ?: "Student registration successful. Please log in.")
+            } else {
+                val errorMsg = when (response.code()) {
+                    400 -> "Invalid registration details. Please verify your department/program combinations."
+                    409 -> "A student with this email or student ID already exists."
+                    else -> "Registration failed (${response.code()})"
+                }
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Registration connection error: ${e.localizedMessage ?: "Network error"}"))
+        }
+    }
+
     fun isLoggedIn(): Boolean = sessionManager.isLoggedIn()
 
     fun getUserRole(): String? = sessionManager.getUserRole()

@@ -95,4 +95,19 @@ class StudentRepository(
             Result.failure(e)
         }
     }
+
+    suspend fun updateProfile(student: StudentDto): Result<StudentDto> = withContext(Dispatchers.IO) {
+        try {
+            val response = apiService.updateMyStudentProfile(student)
+            if (response.isSuccessful && response.body() != null) {
+                val updated = response.body()!!
+                sessionManager.saveStudent(updated)
+                Result.success(updated)
+            } else {
+                Result.failure(Exception("Failed to update profile: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
