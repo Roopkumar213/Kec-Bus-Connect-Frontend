@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import MapView from '../components/MapView';
+import initialBuses from '../data/mockBuses';
 import { 
   MapPin, 
   Clock, 
