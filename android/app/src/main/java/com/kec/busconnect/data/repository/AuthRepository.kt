@@ -22,26 +22,42 @@ class AuthRepository(
                 val body = response.body()!!
                 if (body.success && !body.token.isNullOrBlank() && body.user != null) {
                     sessionManager.saveAuthSession(body.token, body.user, body.student)
+
+                    // If student, proactively fetch and cache profile
+                    if (body.user.role.equals("STUDENT", ignoreCase = true)) {
+                        try {
+                            val profileRes = apiService.getMyStudentProfile()
+                            if (profileRes.isSuccessful && profileRes.body() != null) {
+                                sessionManager.saveStudent(profileRes.body()!!)
+                            }
+                        } catch (e: Exception) {
+                            // Non-fatal, profile will be fetched on dashboard entry
+                        }
+                    }
+
                     Result.success(body)
                 } else {
-                    Result.failure(Exception(body.message ?: "Invalid credentials"))
+                    Result.failure(Exception(body.message ?: "Incorrect email or password."))
                 }
             } else {
                 val errorMsg = when (response.code()) {
-                    401 -> "Invalid email or password."
-                    403 -> "Your account is disabled or you do not have permission."
-                    404 -> "Authentication service not found."
-                    500 -> "Internal server error. Please try again later."
+                    400 -> "Invalid request. Please check your credentials."
+                    401 -> "Incorrect email or password."
+                    403 -> "Account is disabled or lacks permission."
+                    404 -> "Authentication endpoint not found on server."
+                    500, 502, 503 -> "Server error. Please try again in a few moments."
                     else -> "Login failed (${response.code()})"
                 }
                 Result.failure(Exception(errorMsg))
             }
         } catch (e: java.net.ConnectException) {
-            Result.failure(Exception("Cannot connect to server. Check your internet."))
+            Result.failure(Exception("Unable to connect to the server. Check your internet connection."))
         } catch (e: java.net.SocketTimeoutException) {
-            Result.failure(Exception("Connection timed out. Please try again."))
+            Result.failure(Exception("Server connection timed out. Please check server availability."))
+        } catch (e: java.net.UnknownHostException) {
+            Result.failure(Exception("Server hostname could not be resolved. Check internet."))
         } catch (e: Exception) {
-            Result.failure(Exception("Network error: ${e.localizedMessage ?: "Unable to connect"}"))
+            Result.failure(Exception("Unable to connect to server: ${e.localizedMessage ?: "Network error"}"))
         }
     }
 
@@ -50,6 +66,8 @@ class AuthRepository(
     fun getUserRole(): String? = sessionManager.getUserRole()
 
     fun getStudent() = sessionManager.getStudent()
+
+    fun getUser() = sessionManager.getUser()
 
     fun logout() {
         sessionManager.clearSession()

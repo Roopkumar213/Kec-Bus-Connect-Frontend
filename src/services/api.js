@@ -22,12 +22,14 @@ const handleResponse = async (response) => {
     }
     throw new Error(errorMsg);
   }
-  
+
   if (response.status === 204) {
     return null;
   }
   return response.json();
 };
+
+
 
 export const api = {
   // Auth APIs
@@ -103,8 +105,8 @@ export const api = {
         return mockData;
       }
 
-      throw new Error(err.message === 'Failed to fetch' 
-        ? 'Backend service is starting up on Render. Please wait a moment and try again.' 
+      throw new Error(err.message === 'Failed to fetch'
+        ? 'Backend service is starting up on Render. Please wait a moment and try again.'
         : err.message
       );
     }

@@ -16,7 +16,7 @@ interface ApiService {
     suspend fun login(@Body request: LoginRequest): Response<LoginResponse>
 
     @GET("auth/me")
-    suspend fun getMe(): Response<Map<String, Any>>
+    suspend fun getMe(): Response<MeResponseDto>
 
     // ==========================================
     // 2. Bus & Tracking Public APIs
@@ -98,7 +98,4 @@ interface ApiService {
 
     @GET("admin/buses")
     suspend fun getAdminBuses(): Response<List<BusDto>>
-
-    @GET("admin/stats")
-    suspend fun getAdminStats(): Response<Map<String, Any>>
 }

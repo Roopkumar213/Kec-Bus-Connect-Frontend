@@ -3,6 +3,7 @@ package com.kec.busconnect.ui.student
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kec.busconnect.data.model.LiveBusStatusDto
+import com.kec.busconnect.data.model.LocationShareStatusDto
 import com.kec.busconnect.data.model.StudentDto
 import com.kec.busconnect.data.repository.BusRepository
 import com.kec.busconnect.data.repository.StudentRepository
@@ -16,8 +17,10 @@ import kotlinx.coroutines.launch
 
 data class StudentDashboardUiState(
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val student: StudentDto? = null,
     val busStatus: LiveBusStatusDto? = null,
+    val shareStatus: LocationShareStatusDto? = null,
     val errorMessage: String? = null,
     val passengerConfirmed: Boolean = false
 )
@@ -33,55 +36,65 @@ class StudentViewModel(
     private var pollingJob: Job? = null
 
     init {
-        startPolling()
+        loadInitialData()
+    }
+
+    private fun loadInitialData() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            loadDashboardData()
+            startPolling()
+        }
     }
 
     fun startPolling() {
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             while (isActive) {
-                loadDashboardData()
-                delay(5000L) // Refresh every 5 seconds
+                delay(6000L) // Refresh every 6 seconds
+                val currentStudent = _uiState.value.student
+                if (currentStudent != null) {
+                    val busId = currentStudent.assignedBus ?: "KEC-07"
+                    val liveResult = busRepository.getLiveBusStatus(busId)
+                    val shareResult = studentRepository.getLocationShareStatus(busId)
+
+                    _uiState.value = _uiState.value.copy(
+                        busStatus = liveResult.getOrNull(),
+                        shareStatus = shareResult.getOrNull()
+                    )
+                }
             }
         }
     }
 
     suspend fun loadDashboardData() {
         val profileResult = studentRepository.getMyProfile()
-        
+
         profileResult.onSuccess { student ->
             val busId = student.assignedBus ?: "KEC-07"
             val liveResult = busRepository.getLiveBusStatus(busId)
-            
+            val shareResult = studentRepository.getLocationShareStatus(busId)
+
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
+                isRefreshing = false,
                 student = student,
-                busStatus = liveResult.getOrNull() ?: BusRepository.getDefaultBusStatus(busId),
+                busStatus = liveResult.getOrNull(),
+                shareStatus = shareResult.getOrNull(),
                 errorMessage = null
             )
         }.onFailure { err ->
-            if (_uiState.value.student == null) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    student = StudentDto(
-                        fullName = "Rohan Sharma",
-                        studentId = "22KEC401",
-                        department = "CSE",
-                        academicYear = 3,
-                        section = "A",
-                        assignedBus = "KEC-07",
-                        assignedRoute = "Attikuppam → KEC (via MDR87)"
-                    ),
-                    busStatus = BusRepository.getDefaultBusStatus("KEC-07"),
-                    errorMessage = null
-                )
-            }
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                isRefreshing = false,
+                errorMessage = "Unable to load student profile: ${err.message ?: "Connection error"}"
+            )
         }
     }
 
     fun refreshManually() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            _uiState.value = _uiState.value.copy(isRefreshing = true, errorMessage = null)
             loadDashboardData()
         }
     }
@@ -98,5 +111,10 @@ class StudentViewModel(
             studentRepository.notOnBus(tripId)
             _uiState.value = _uiState.value.copy(passengerConfirmed = false)
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        pollingJob?.cancel()
     }
 }

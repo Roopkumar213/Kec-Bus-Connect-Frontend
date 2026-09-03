@@ -52,3 +52,10 @@ data class GeoPointDto(
     val latitude: Double? get() = if (coordinates.size >= 2) coordinates[1] else null
     val longitude: Double? get() = if (coordinates.size >= 2) coordinates[0] else null
 }
+
+data class MeResponseDto(
+    @SerializedName("user") val user: UserDto?,
+    @SerializedName("student") val student: StudentDto?,
+    @SerializedName("assignedBus") val assignedBus: BusDto?,
+    @SerializedName("assignedRoute") val assignedRoute: RouteDto?
+)

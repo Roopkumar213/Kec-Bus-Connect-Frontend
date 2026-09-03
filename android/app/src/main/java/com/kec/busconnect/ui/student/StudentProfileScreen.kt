@@ -53,11 +53,11 @@ fun StudentProfileScreen(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
-                ProfileInfoRow("Full Name", student?.fullName ?: "Rohan Sharma")
-                ProfileInfoRow("Roll / Student ID", student?.studentId ?: "22KEC401")
-                ProfileInfoRow("Mobile", student?.mobile ?: "9888877777")
-                ProfileInfoRow("Program & Dept", "${student?.program ?: "B.Tech"} - ${student?.department ?: "CSE"}")
-                ProfileInfoRow("Academic Year", "Year ${student?.academicYear ?: 3}, Sec ${student?.section ?: "A"}")
+                ProfileInfoRow("Full Name", student?.fullName ?: "—")
+                ProfileInfoRow("Roll / Student ID", student?.studentId ?: "—")
+                ProfileInfoRow("Mobile", student?.mobile ?: "—")
+                ProfileInfoRow("Program & Dept", "${student?.program ?: "—"} ${student?.department?.let { "• $it" } ?: ""}")
+                ProfileInfoRow("Academic Year", "Year ${student?.academicYear ?: "—"} ${student?.section?.let { "• Sec $it" } ?: ""}")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -71,9 +71,9 @@ fun StudentProfileScreen(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
-                ProfileInfoRow("Assigned Bus", student?.assignedBus ?: "KEC-07")
+                ProfileInfoRow("Assigned Bus", student?.assignedBus ?: "Not Assigned")
                 ProfileInfoRow("Morning Boarding Stop", student?.assignedRoute ?: "Attikuppam (Origin)")
-                ProfileInfoRow("Evening Drop Stop", student?.eveningDropAddress ?: "Attikuppam (Origin)")
+                ProfileInfoRow("Evening Drop Stop", student?.eveningDropAddress ?: student?.assignedRoute ?: "Attikuppam (Origin)")
                 ProfileInfoRow("Arrival Reminder", "${student?.reminderMinutes ?: 10} minutes before stop")
             }
 

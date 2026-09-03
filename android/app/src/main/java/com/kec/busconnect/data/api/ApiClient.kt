@@ -11,20 +11,37 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Singleton factory providing configured Retrofit API service.
+ * Supports configurable Base URLs for Local LAN, Emulator, and Production.
  */
 object ApiClient {
 
     // Production Render backend URL
-    private const val PRODUCTION_BASE_URL = "https://kec-bus-connect-backend.onrender.com/api/"
+    const val PRODUCTION_BASE_URL = "https://kec-bus-connect-backend.onrender.com/api/"
 
-    // Local Android Emulator testing URL
-    private const val DEV_BASE_URL = "http://10.0.2.2:8081/api/"
+    // Local Android Emulator URL
+    const val EMULATOR_DEV_BASE_URL = "http://10.0.2.2:8081/api/"
 
-    private val baseUrl: String
-        get() = if (BuildConfig.DEBUG) DEV_BASE_URL else PRODUCTION_BASE_URL
+    @Volatile
+    private var customBaseUrl: String? = null
 
     @Volatile
     private var instance: ApiService? = null
+
+    /**
+     * Allows setting a custom Base URL at runtime (e.g. for testing on a real phone with computer's LAN IP).
+     * Example: ApiClient.setCustomBaseUrl("http://192.168.1.100:8081/api/")
+     */
+    fun setCustomBaseUrl(url: String?) {
+        val sanitized = if (!url.isNullOrBlank() && !url.endsWith("/")) "$url/" else url
+        if (customBaseUrl != sanitized) {
+            customBaseUrl = sanitized
+            instance = null // Invalidate existing instance so new Retrofit is built
+        }
+    }
+
+    fun getBaseUrl(): String {
+        return customBaseUrl ?: if (BuildConfig.DEBUG) EMULATOR_DEV_BASE_URL else PRODUCTION_BASE_URL
+    }
 
     fun getService(context: Context): ApiService {
         return instance ?: synchronized(this) {
@@ -37,7 +54,7 @@ object ApiClient {
 
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) {
-                HttpLoggingInterceptor.Level.BODY
+                HttpLoggingInterceptor.Level.BASIC
             } else {
                 HttpLoggingInterceptor.Level.NONE
             }
@@ -46,13 +63,14 @@ object ApiClient {
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(sessionManager))
             .addInterceptor(loggingInterceptor)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(25, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .writeTimeout(25, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build()
 
         return Retrofit.Builder()
-            .baseUrl(baseUrl)
+            .baseUrl(getBaseUrl())
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

@@ -18,14 +18,14 @@ import kotlinx.coroutines.launch
 import kotlin.math.*
 
 data class TrackingUiState(
-    val isLoading: Boolean = false,
+    val isLoading: Boolean = true,
     val busNumber: String = "KEC-07",
-    val liveStatus: LiveBusStatusDto? = BusRepository.getDefaultBusStatus("KEC-07"),
-    val route: RouteDto? = BusRepository.getDefaultMdr87Route(),
-    val stops: List<StopDto> = BusRepository.getDefaultMdr87Route().stops,
-    val selectedStop: StopDto? = BusRepository.getDefaultMdr87Route().stops.lastOrNull(),
-    val distanceToSelectedStopKm: Double? = 39.8,
-    val etaMinutesToSelectedStop: Double? = 75.0,
+    val liveStatus: LiveBusStatusDto? = null,
+    val route: RouteDto? = null,
+    val stops: List<StopDto> = emptyList(),
+    val selectedStop: StopDto? = null,
+    val distanceToSelectedStopKm: Double? = null,
+    val etaMinutesToSelectedStop: Double? = null,
     val arrivalAlert: String? = null,
     val selectedDirection: String = "MORNING", // MORNING, EVENING
     val shareStatus: LocationShareStatusDto? = null,
@@ -45,21 +45,22 @@ class TrackingViewModel(
 
     private var pollingJob: Job? = null
 
-    init {
-        // Compute initial metrics
-        recalculateProximity()
-    }
-
     fun startTracking(busNumber: String) {
-        _uiState.value = _uiState.value.copy(busNumber = busNumber)
-        
+        _uiState.value = _uiState.value.copy(busNumber = busNumber, isLoading = true, errorMessage = null)
+
+        viewModelScope.launch {
+            loadRouteDetails(busNumber)
+            fetchTelemetry(busNumber)
+            fetchShareEligibility(busNumber)
+        }
+
         // Start 5-second polling loop
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             while (isActive) {
+                delay(5000L)
                 fetchTelemetry(busNumber)
                 fetchShareEligibility(busNumber)
-                delay(5000L) // 5 seconds interval
             }
         }
     }
@@ -71,10 +72,10 @@ class TrackingViewModel(
     }
 
     fun setDirection(direction: String) {
-        val rawStops = _uiState.value.route?.stops ?: BusRepository.getDefaultMdr87Route().stops
+        val rawStops = _uiState.value.route?.stops ?: emptyList()
         val sortedStops = rawStops.sortedBy { it.sequence ?: 0 }
         val orderedStops = if (direction == "EVENING") sortedStops.reversed() else sortedStops
-        
+
         _uiState.value = _uiState.value.copy(
             selectedDirection = direction,
             stops = orderedStops,
@@ -103,7 +104,7 @@ class TrackingViewModel(
             }
 
             val currentDirection = live.direction ?: _uiState.value.selectedDirection
-            val rawStops = _uiState.value.route?.stops ?: BusRepository.getDefaultMdr87Route().stops
+            val rawStops = _uiState.value.route?.stops ?: emptyList()
             val sortedStops = rawStops.sortedBy { it.sequence ?: 0 }
             val stopsList = if (currentDirection == "EVENING") sortedStops.reversed() else sortedStops
 
@@ -116,10 +117,9 @@ class TrackingViewModel(
             )
             recalculateProximity()
         }.onFailure { err ->
-            // In case backend is offline, preserve local fallback data gracefully
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
-                errorMessage = null // Keep clean UI with cached/fallback route
+                errorMessage = if (_uiState.value.liveStatus == null) "Bus telemetry unavailable (${err.message})" else null
             )
             recalculateProximity()
         }
@@ -129,8 +129,8 @@ class TrackingViewModel(
         val live = _uiState.value.liveStatus ?: return
         val stop = _uiState.value.selectedStop ?: return
 
-        val busLat = live.latitude ?: 12.884713
-        val busLng = live.longitude ?: 78.479812
+        val busLat = live.latitude ?: return
+        val busLng = live.longitude ?: return
         val stopLat = stop.latitude ?: return
         val stopLng = stop.longitude ?: return
 
@@ -163,23 +163,21 @@ class TrackingViewModel(
     private suspend fun loadRouteDetails(busId: String) {
         val busResult = busRepository.getBusDetails(busId)
         busResult.onSuccess { bus ->
-            val routeId = bus.routeId ?: "route-mdr87"
-            val routeResult = busRepository.getRouteById(routeId)
-            routeResult.onSuccess { r ->
-                val sortedStops = r.stops.sortedBy { it.sequence ?: 0 }
-                _uiState.value = _uiState.value.copy(
-                    route = r,
-                    stops = if (_uiState.value.selectedDirection == "EVENING") sortedStops.reversed() else sortedStops
-                )
-                recalculateProximity()
+            val routeId = bus.routeId
+            if (!routeId.isNullOrBlank()) {
+                val routeResult = busRepository.getRouteById(routeId)
+                routeResult.onSuccess { r ->
+                    val sortedStops = r.stops.sortedBy { it.sequence ?: 0 }
+                    val currentDir = _uiState.value.selectedDirection
+                    val orderedStops = if (currentDir == "EVENING") sortedStops.reversed() else sortedStops
+                    _uiState.value = _uiState.value.copy(
+                        route = r,
+                        stops = orderedStops,
+                        selectedStop = _uiState.value.selectedStop ?: orderedStops.firstOrNull()
+                    )
+                    recalculateProximity()
+                }
             }
-        }.onFailure {
-            val defaultR = BusRepository.getDefaultMdr87Route()
-            _uiState.value = _uiState.value.copy(
-                route = defaultR,
-                stops = defaultR.stops
-            )
-            recalculateProximity()
         }
     }
 

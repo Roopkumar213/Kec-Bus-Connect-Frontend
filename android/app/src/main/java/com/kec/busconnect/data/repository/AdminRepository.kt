@@ -36,17 +36,4 @@ class AdminRepository(private val apiService: ApiService) {
             Result.failure(e)
         }
     }
-
-    suspend fun getAdminStats(): Result<Map<String, Any>> = withContext(Dispatchers.IO) {
-        try {
-            val response = apiService.getAdminStats()
-            if (response.isSuccessful && response.body() != null) {
-                Result.success(response.body()!!)
-            } else {
-                Result.failure(Exception("Failed to fetch stats: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
 }

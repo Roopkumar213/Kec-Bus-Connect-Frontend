@@ -21,15 +21,12 @@ class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
     private val _uiState = MutableStateFlow<LoginUiState>(LoginUiState.Idle)
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
-    var emailInput = MutableStateFlow("")
-    var passwordInput = MutableStateFlow("")
+    val emailInput = MutableStateFlow("")
+    val passwordInput = MutableStateFlow("")
+    val passwordVisible = MutableStateFlow(false)
 
-    init {
-        // Auto-login check if already authenticated
-        if (authRepository.isLoggedIn()) {
-            val role = authRepository.getUserRole() ?: "STUDENT"
-            // If already logged in, navigate directly
-        }
+    fun togglePasswordVisibility() {
+        passwordVisible.value = !passwordVisible.value
     }
 
     fun login() {
@@ -37,7 +34,7 @@ class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
         val password = passwordInput.value.trim()
 
         if (email.isBlank() || password.isBlank()) {
-            _uiState.value = LoginUiState.Error("Please enter both email and password")
+            _uiState.value = LoginUiState.Error("Please enter both email and password.")
             return
         }
 
@@ -48,7 +45,7 @@ class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
             result.onSuccess { response ->
                 _uiState.value = LoginUiState.Success(response)
             }.onFailure { exception ->
-                _uiState.value = LoginUiState.Error(exception.message ?: "Authentication failed")
+                _uiState.value = LoginUiState.Error(exception.message ?: "Authentication failed.")
             }
         }
     }
