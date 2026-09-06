@@ -1,6 +1,7 @@
 package com.kec.busconnect.ui.admin
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,12 +40,12 @@ fun AdminDashboardScreen(
                 onLogoutClick = onLogoutClick,
                 actions = {
                     IconButton(onClick = { viewModel.loadAdminData() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = TextPrimary)
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = PrimaryBlue)
                     }
                 }
             )
         },
-        containerColor = DarkBackground
+        containerColor = LightBackground
     ) { paddingValues ->
         if (uiState.isLoading) {
             Box(
@@ -74,16 +77,17 @@ fun AdminDashboardScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Card(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).shadow(2.dp, RoundedCornerShape(16.dp)),
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+                            colors = CardDefaults.cardColors(containerColor = LightSurface),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LightCardBorder)
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
+                                        .size(38.dp)
                                         .clip(CircleShape)
-                                        .background(PrimaryBlue.copy(alpha = 0.2f)),
+                                        .background(PrimaryBlueLight),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(Icons.Default.DirectionsBus, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(20.dp))
@@ -95,16 +99,17 @@ fun AdminDashboardScreen(
                         }
 
                         Card(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).shadow(2.dp, RoundedCornerShape(16.dp)),
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+                            colors = CardDefaults.cardColors(containerColor = LightSurface),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LightCardBorder)
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
+                                        .size(38.dp)
                                         .clip(CircleShape)
-                                        .background(SuccessEmerald.copy(alpha = 0.2f)),
+                                        .background(SuccessEmeraldLight),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(Icons.Default.Group, contentDescription = null, tint = SuccessEmerald, modifier = Modifier.size(20.dp))
@@ -121,9 +126,11 @@ fun AdminDashboardScreen(
                 item {
                     TabRow(
                         selectedTabIndex = selectedTab,
-                        containerColor = DarkSurface,
+                        containerColor = LightSurface,
                         contentColor = PrimaryBlue,
-                        modifier = Modifier.clip(RoundedCornerShape(10.dp))
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, LightCardBorder, RoundedCornerShape(12.dp))
                     ) {
                         Tab(
                             selected = selectedTab == 0,
@@ -160,7 +167,7 @@ fun AdminDashboardScreen(
                                         Icon(Icons.Default.DirectionsBus, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(24.dp))
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column {
-                                            Text(text = bus.busNumber, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                                            Text(text = bus.busNumber, style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
                                             Text(text = "Reg: ${bus.registrationNumber ?: "AP-39-TJ-2026"}", fontSize = 12.sp, color = TextSecondary)
                                         }
                                     }
@@ -168,7 +175,7 @@ fun AdminDashboardScreen(
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
-                                            .background(if (isRunning) SuccessEmerald.copy(alpha = 0.15f) else DarkSurfaceVariant)
+                                            .background(if (isRunning) SuccessEmeraldLight else LightSurfaceVariant)
                                             .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
                                         Text(
@@ -204,7 +211,8 @@ fun AdminDashboardScreen(
                                         Text(
                                             text = student.fullName ?: "Student",
                                             style = MaterialTheme.typography.titleMedium,
-                                            color = TextPrimary
+                                            color = TextPrimary,
+                                            fontWeight = FontWeight.Bold
                                         )
                                         Text(
                                             text = "ID: ${student.studentId ?: "—"} • ${student.department ?: "Engineering"}",
@@ -215,7 +223,7 @@ fun AdminDashboardScreen(
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
-                                            .background(PrimaryBlue.copy(alpha = 0.15f))
+                                            .background(PrimaryBlueLight)
                                             .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
                                         Text(

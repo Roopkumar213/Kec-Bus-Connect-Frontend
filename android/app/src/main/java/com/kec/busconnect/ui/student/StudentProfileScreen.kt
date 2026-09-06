@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -14,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,7 +40,7 @@ fun StudentProfileScreen(
                 onBackClick = onBackClick
             )
         },
-        containerColor = DarkBackground
+        containerColor = LightBackground
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -52,13 +54,14 @@ fun StudentProfileScreen(
                 Text(
                     text = "Personal Information",
                     style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 ProfileInfoRow("Full Name", student?.fullName ?: "—")
                 ProfileInfoRow("Roll / Student ID", student?.studentId ?: "—")
-                ProfileInfoRow("Mobile", student?.mobile ?: "—")
+                ProfileInfoRow("Mobile Number", student?.mobile ?: "—")
                 ProfileInfoRow("Program & Dept", "${student?.program ?: "—"} ${student?.department?.let { "• $it" } ?: ""}")
                 ProfileInfoRow("Academic Year", "Year ${student?.academicYear ?: "—"} ${student?.section?.let { "• Sec $it" } ?: ""}")
             }
@@ -73,14 +76,16 @@ fun StudentProfileScreen(
                 Text(
                     text = "Bus & Route Configuration",
                     style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                ProfileInfoRow("Assigned Bus", student?.assignedBus ?: "KEC-07")
+                val displayBus = if (student?.assignedBus?.startsWith("KEC") == true) student.assignedBus else "KEC-07"
+                ProfileInfoRow("Assigned Bus", displayBus)
                 ProfileInfoRow("Morning Boarding Stop", student?.assignedRoute ?: "Attikuppam (Origin)")
                 ProfileInfoRow("Evening Drop Stop", student?.eveningDropAddress ?: student?.assignedRoute ?: "Attikuppam (Origin)")
-                ProfileInfoRow("Arrival Reminder", "${student?.reminderMinutes ?: 10} minutes before stop")
+                ProfileInfoRow("Arrival Reminder", "${student?.reminderMinutes ?: 10} minutes before arrival")
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -88,7 +93,7 @@ fun StudentProfileScreen(
                     onClick = { showStopModal = true },
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                    modifier = Modifier.fillMaxWidth().height(46.dp)
                 ) {
                     Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
@@ -112,25 +117,32 @@ fun StudentProfileScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .background(if (isSelected) PrimaryBlue.copy(alpha = 0.15f) else DarkSurface, RoundedCornerShape(8.dp))
+                                        .padding(vertical = 3.dp)
+                                        .background(if (isSelected) PrimaryBlueLight else Color.Transparent, RoundedCornerShape(8.dp))
                                         .clickable {
                                             viewModel.updateBoardingStop(stop.name, stop.latitude ?: 12.884713, stop.longitude ?: 78.479812)
                                             showStopModal = false
                                         }
                                         .padding(10.dp),
-                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("${idx + 1}.", color = PrimaryBlue, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .background(if (isSelected) PrimaryBlue else LightSurfaceVariant, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("${idx + 1}", color = if (isSelected) Color.White else TextSecondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(text = stop.name, color = if (isSelected) PrimaryBlue else TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                         if (stop.landmark != null) {
-                                            Text(text = stop.landmark!!, color = TextMuted, fontSize = 11.sp)
+                                            Text(text = stop.landmark, color = TextMuted, fontSize = 11.sp)
                                         }
                                     }
                                     if (isSelected) {
-                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(20.dp))
                                     }
                                 }
                             }
@@ -138,10 +150,10 @@ fun StudentProfileScreen(
                     },
                     confirmButton = {
                         TextButton(onClick = { showStopModal = false }) {
-                            Text("Cancel", color = TextSecondary)
+                            Text("Done", color = PrimaryBlue, fontWeight = FontWeight.Bold)
                         }
                     },
-                    containerColor = DarkSurface
+                    containerColor = LightSurface
                 )
             }
 
@@ -150,7 +162,8 @@ fun StudentProfileScreen(
             Button(
                 onClick = onBackClick,
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant),
+                colors = ButtonDefaults.buttonColors(containerColor = LightSurfaceVariant, contentColor = TextPrimary),
+                border = androidx.compose.foundation.BorderStroke(1.dp, LightCardBorder),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)

@@ -1,7 +1,10 @@
 package com.kec.busconnect.ui.login
 
-import androidx.compose.foundation.Image
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,9 +20,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -28,9 +32,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kec.busconnect.R
 import com.kec.busconnect.data.api.ApiClient
 import com.kec.busconnect.data.model.LoginResponse
+import com.kec.busconnect.data.repository.BusRepository
 import com.kec.busconnect.ui.components.ErrorBanner
 import com.kec.busconnect.ui.components.GlassCard
 import com.kec.busconnect.ui.theme.*
@@ -61,7 +65,7 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(LightBackground)
             .padding(horizontal = 24.dp, vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -95,14 +99,14 @@ fun LoginScreen(
                 modifier = Modifier
                     .size(76.dp)
                     .clip(CircleShape)
-                    .background(PrimaryBlue.copy(alpha = 0.15f)),
+                    .background(PrimaryBlueLight),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.DirectionsBus,
                     contentDescription = "KEC BusConnect",
                     tint = PrimaryBlue,
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier.size(42.dp)
                 )
             }
 
@@ -144,10 +148,10 @@ fun LoginScreen(
                 OutlinedTextField(
                     value = email,
                     onValueChange = { viewModel.emailInput.value = it },
-                    label = { Text("College Email", color = TextSecondary) },
-                    placeholder = { Text("e.g. student@kec.ac.in", color = TextMuted) },
+                    label = { Text("College Email") },
+                    placeholder = { Text("student@kec.ac.in", color = TextMuted) },
                     leadingIcon = {
-                        Icon(Icons.Default.Email, contentDescription = null, tint = TextSecondary)
+                        Icon(Icons.Default.Email, contentDescription = null, tint = PrimaryBlue)
                     },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
@@ -159,7 +163,7 @@ fun LoginScreen(
                     ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryBlue,
-                        unfocusedBorderColor = DarkCardBorder,
+                        unfocusedBorderColor = LightCardBorder,
                         focusedTextColor = TextPrimary,
                         unfocusedTextColor = TextPrimary,
                         cursorColor = PrimaryBlue
@@ -173,10 +177,10 @@ fun LoginScreen(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { viewModel.passwordInput.value = it },
-                    label = { Text("Password", color = TextSecondary) },
+                    label = { Text("Password") },
                     placeholder = { Text("••••••••", color = TextMuted) },
                     leadingIcon = {
-                        Icon(Icons.Default.Lock, contentDescription = null, tint = TextSecondary)
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = PrimaryBlue)
                     },
                     trailingIcon = {
                         IconButton(onClick = { viewModel.togglePasswordVisibility() }) {
@@ -201,7 +205,7 @@ fun LoginScreen(
                     ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryBlue,
-                        unfocusedBorderColor = DarkCardBorder,
+                        unfocusedBorderColor = LightCardBorder,
                         focusedTextColor = TextPrimary,
                         unfocusedTextColor = TextPrimary,
                         cursorColor = PrimaryBlue
@@ -221,7 +225,7 @@ fun LoginScreen(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PrimaryBlue,
-                        contentColor = TextPrimary
+                        contentColor = Color.White
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -229,7 +233,7 @@ fun LoginScreen(
                 ) {
                     if (uiState is LoginUiState.Loading) {
                         CircularProgressIndicator(
-                            color = TextPrimary,
+                            color = Color.White,
                             modifier = Modifier.size(22.dp),
                             strokeWidth = 2.5.dp
                         )
@@ -242,13 +246,14 @@ fun LoginScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Student Signup Button
                 OutlinedButton(
                     onClick = { showSignupDialog = true },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryBlue),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryBlueBorder),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
@@ -263,6 +268,26 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
+            // Quick Role Switch Helper
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                TextButton(onClick = {
+                    viewModel.emailInput.value = "student@kec.ac.in"
+                    viewModel.passwordInput.value = "student123"
+                }) {
+                    Text("Student Demo", fontSize = 12.sp, color = TextSecondary)
+                }
+                Text("•", modifier = Modifier.padding(top = 14.dp), color = TextMuted)
+                TextButton(onClick = {
+                    viewModel.emailInput.value = "driver@kec.ac.in"
+                    viewModel.passwordInput.value = "driver123"
+                }) {
+                    Text("Driver Demo", fontSize = 12.sp, color = TextSecondary)
+                }
+            }
+
             // Active Server Endpoint Indicator
             Text(
                 text = "Server: ${ApiClient.getBaseUrl()}",
@@ -276,6 +301,7 @@ fun LoginScreen(
     val signupSuccess by viewModel.signupSuccessMessage.collectAsState()
     val signupError by viewModel.signupErrorMessage.collectAsState()
     val isSigningUp by viewModel.isSigningUp.collectAsState()
+    val corridorStops = remember { BusRepository.getDefaultMdr87Route().stops }
 
     if (showSignupDialog) {
         var newFullName by remember { mutableStateOf("") }
@@ -288,6 +314,10 @@ fun LoginScreen(
         var newYear by remember { mutableStateOf(1) }
         var newSection by remember { mutableStateOf("A") }
         var newBatch by remember { mutableStateOf("2023 - 2027") }
+        var selectedStopName by remember { mutableStateOf("Attikuppam (Origin)") }
+        var selectedStopLat by remember { mutableStateOf(12.884713) }
+        var selectedStopLng by remember { mutableStateOf(78.479812) }
+        var showStopDropdown by remember { mutableStateOf(false) }
         var newPassword by remember { mutableStateOf("") }
 
         AlertDialog(
@@ -317,7 +347,7 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     // Program selection
-                    Text("College & Program:", fontSize = 12.sp, color = TextMuted)
+                    Text("College & Program:", fontSize = 12.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
                     Row(modifier = Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(selected = newProgram == "BTECH", onClick = { newCollegeType = "ENGINEERING"; newProgram = "BTECH"; newDept = "CSE" }, label = { Text("B.Tech") })
                         FilterChip(selected = newProgram == "BCA", onClick = { newCollegeType = "DEGREE"; newProgram = "BCA"; newDept = "BCA" }, label = { Text("BCA") })
@@ -327,6 +357,54 @@ fun LoginScreen(
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(value = newDept, onValueChange = { newDept = it }, label = { Text("Department (e.g. CSE, ECE, AI_ML)") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Boarding Stop Selection
+                    Text("Boarding Stop (MDR87 Corridor):", fontSize = 12.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                    OutlinedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showStopDropdown = true }
+                            .padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = selectedStopName, color = PrimaryBlue, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = PrimaryBlue)
+                        }
+                    }
+
+                    if (showStopDropdown) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                                .verticalScroll(rememberScrollState())
+                                .border(1.dp, LightCardBorder, RoundedCornerShape(8.dp))
+                                .padding(4.dp)
+                        ) {
+                            corridorStops.forEach { stop ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedStopName = stop.name
+                                            selectedStopLat = stop.latitude ?: 12.884713
+                                            selectedStopLng = stop.longitude ?: 78.479812
+                                            showStopDropdown = false
+                                        }
+                                        .padding(8.dp)
+                                ) {
+                                    Text(text = stop.name, fontSize = 12.sp, color = TextPrimary)
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(value = newPassword, onValueChange = { newPassword = it }, label = { Text("Password (min 6 chars)") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                 }
@@ -345,8 +423,8 @@ fun LoginScreen(
                             academicYear = newYear,
                             section = newSection,
                             batch = newBatch,
-                            boardingLat = 12.884713,
-                            boardingLng = 78.479812,
+                            boardingLat = selectedStopLat,
+                            boardingLng = selectedStopLng,
                             pass = newPassword,
                             onSuccess = { showSignupDialog = false }
                         )
@@ -355,7 +433,7 @@ fun LoginScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
                     if (isSigningUp) {
-                        CircularProgressIndicator(color = TextPrimary, modifier = Modifier.size(18.dp))
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp))
                     } else {
                         Text("Register")
                     }
@@ -366,7 +444,7 @@ fun LoginScreen(
                     Text("Cancel", color = TextSecondary)
                 }
             },
-            containerColor = DarkSurface
+            containerColor = LightSurface
         )
     }
 
@@ -378,48 +456,41 @@ fun LoginScreen(
             text = {
                 Column {
                     Text(
-                        "Set backend API base URL. For real physical devices, use your computer's LAN IP.",
+                        "Set backend server base URL for API requests:",
+                        fontSize = 13.sp,
                         color = TextSecondary,
-                        fontSize = 13.sp
+                        modifier = Modifier.padding(bottom = 12.dp)
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = customServerUrlInput,
                         onValueChange = { customServerUrlInput = it },
-                        label = { Text("Base URL", color = TextSecondary) },
+                        label = { Text("Server URL") },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = DarkCardBorder,
+                            unfocusedBorderColor = LightCardBorder,
                             focusedTextColor = TextPrimary,
                             unfocusedTextColor = TextPrimary
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = {
-                            customServerUrlInput = ApiClient.PRODUCTION_BASE_URL
-                        }) {
-                            Text("Production", fontSize = 12.sp, color = PrimaryBlue)
-                        }
-                        TextButton(onClick = {
-                            customServerUrlInput = ApiClient.EMULATOR_DEV_BASE_URL
-                        }) {
-                            Text("Emulator", fontSize = 12.sp, color = TextSecondary)
-                        }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    TextButton(onClick = {
+                        customServerUrlInput = "http://10.0.2.2:8080"
+                    }) {
+                        Text("Use Emulator (10.0.2.2:8080)", fontSize = 12.sp, color = PrimaryBlue)
                     }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        ApiClient.setCustomBaseUrl(customServerUrlInput.trim())
+                        ApiClient.setCustomBaseUrl(customServerUrlInput)
                         showServerConfigDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
-                    Text("Apply")
+                    Text("Save")
                 }
             },
             dismissButton = {
@@ -427,7 +498,7 @@ fun LoginScreen(
                     Text("Cancel", color = TextSecondary)
                 }
             },
-            containerColor = DarkSurface
+            containerColor = LightSurface
         )
     }
 }

@@ -99,6 +99,7 @@ class TrackingViewModel(
     private suspend fun fetchTelemetry(busNumber: String) {
         val result = busRepository.getLiveBusStatus(busNumber)
         result.onSuccess { live ->
+            // Load route first if not loaded yet (await it, don't race)
             if (_uiState.value.route == null) {
                 loadRouteDetails(busNumber)
             }
@@ -108,10 +109,14 @@ class TrackingViewModel(
             val sortedStops = rawStops.sortedBy { it.sequence ?: 0 }
             val stopsList = if (currentDirection == "EVENING") sortedStops.reversed() else sortedStops
 
+            // Only update stops if we actually have some now (don't overwrite with empty list)
+            val finalStops = if (stopsList.isNotEmpty()) stopsList else _uiState.value.stops
+
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 liveStatus = live,
-                stops = stopsList,
+                stops = finalStops,
+                selectedStop = _uiState.value.selectedStop ?: finalStops.firstOrNull(),
                 selectedDirection = currentDirection,
                 errorMessage = null
             )
@@ -163,22 +168,42 @@ class TrackingViewModel(
     private suspend fun loadRouteDetails(busId: String) {
         val busResult = busRepository.getBusDetails(busId)
         busResult.onSuccess { bus ->
+            if (bus.route != null && bus.route.stops.isNotEmpty()) {
+                applyRouteToState(bus.route)
+                return@onSuccess
+            }
             val routeId = bus.routeId
             if (!routeId.isNullOrBlank()) {
                 val routeResult = busRepository.getRouteById(routeId)
                 routeResult.onSuccess { r ->
-                    val sortedStops = r.stops.sortedBy { it.sequence ?: 0 }
-                    val currentDir = _uiState.value.selectedDirection
-                    val orderedStops = if (currentDir == "EVENING") sortedStops.reversed() else sortedStops
-                    _uiState.value = _uiState.value.copy(
-                        route = r,
-                        stops = orderedStops,
-                        selectedStop = _uiState.value.selectedStop ?: orderedStops.firstOrNull()
-                    )
-                    recalculateProximity()
+                    applyRouteToState(r)
+                }.onFailure {
+                    applyRouteToState(BusRepository.getDefaultMdr87Route())
                 }
+            } else {
+                applyRouteToState(BusRepository.getDefaultMdr87Route())
+            }
+        }.onFailure {
+            val allRoutes = busRepository.getRoutes().getOrNull()
+            val matchedRoute = allRoutes?.firstOrNull { it.stops.isNotEmpty() }
+            if (matchedRoute != null) {
+                applyRouteToState(matchedRoute)
+            } else {
+                applyRouteToState(BusRepository.getDefaultMdr87Route())
             }
         }
+    }
+
+    private fun applyRouteToState(r: com.kec.busconnect.data.model.RouteDto) {
+        val sortedStops = r.stops.sortedBy { it.sequence ?: 0 }
+        val currentDir = _uiState.value.selectedDirection
+        val orderedStops = if (currentDir == "EVENING") sortedStops.reversed() else sortedStops
+        _uiState.value = _uiState.value.copy(
+            route = r,
+            stops = orderedStops,
+            selectedStop = _uiState.value.selectedStop ?: orderedStops.firstOrNull()
+        )
+        recalculateProximity()
     }
 
     private suspend fun fetchShareEligibility(busNumber: String) {

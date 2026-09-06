@@ -253,7 +253,7 @@ const Landing = () => {
                 Download Android APK (v1.0.0)
               </a>
               <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                Size: ~2.0 MB • Android 8.0+ (Native Jetpack Compose)
+                Size: ~18.8 MB • Android 8.0+ (Native Jetpack Compose + Live Maps)
               </span>
             </div>
           </div>

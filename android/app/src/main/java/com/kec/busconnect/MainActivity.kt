@@ -8,7 +8,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.kec.busconnect.ui.navigation.AppNavigation
-import com.kec.busconnect.ui.theme.DarkBackground
+import com.kec.busconnect.ui.theme.LightBackground
 import com.kec.busconnect.ui.theme.KECBusConnectTheme
 
 /**
@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
             KECBusConnectTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = DarkBackground
+                    color = LightBackground
                 ) {
                     val navController = rememberNavController()
                     AppNavigation(

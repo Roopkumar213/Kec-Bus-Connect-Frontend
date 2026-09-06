@@ -3,22 +3,22 @@ package com.kec.busconnect.ui.theme
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val DarkColorScheme = darkColorScheme(
+private val ModernLightColorScheme = lightColorScheme(
     primary = PrimaryBlue,
-    onPrimary = TextPrimary,
+    onPrimary = LightSurface,
     secondary = AccentAmber,
-    onSecondary = DarkBackground,
+    onSecondary = LightSurface,
     tertiary = SuccessEmerald,
-    background = DarkBackground,
-    surface = DarkSurface,
-    surfaceVariant = DarkSurfaceVariant,
+    background = LightBackground,
+    surface = LightSurface,
+    surfaceVariant = LightSurfaceVariant,
     onBackground = TextPrimary,
     onSurface = TextPrimary,
     error = DangerRose
@@ -26,18 +26,17 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun KECBusConnectTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = false, // Enforce clean, light, modern UI version requested by user
     content: @Composable () -> Unit
 ) {
-    // We enforce the sleek modern dark theme for consistent visual elegance across devices
-    val colorScheme = DarkColorScheme
+    val colorScheme = ModernLightColorScheme
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = DarkBackground.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            window.statusBarColor = LightBackground.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = true
         }
     }
 
@@ -47,3 +46,4 @@ fun KECBusConnectTheme(
         content = content
     )
 }
+

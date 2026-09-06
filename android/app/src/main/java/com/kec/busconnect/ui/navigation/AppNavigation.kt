@@ -127,9 +127,12 @@ fun AppNavigation(
         // 4. Driver Dashboard
         composable(Screen.DriverDashboard.route) {
             val driverViewModel: DriverViewModel = viewModel(factory = driverViewModelFactory)
-            val user = authRepo.getStudent()
+            // Drivers don't have student profiles - use student profile if available,
+            // otherwise fall back to a hardcoded bus ID that the backend can confirm
+            val studentProfile = authRepo.getStudent()
+            val driverBusId = studentProfile?.assignedBus ?: "KEC-07"
             LaunchedEffect(Unit) {
-                driverViewModel.loadActiveTrip(user?.assignedBus ?: "KEC-07")
+                driverViewModel.loadActiveTrip(driverBusId)
             }
             DriverDashboardScreen(
                 viewModel = driverViewModel,

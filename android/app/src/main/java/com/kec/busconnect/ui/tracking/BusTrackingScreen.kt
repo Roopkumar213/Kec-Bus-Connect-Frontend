@@ -1,9 +1,17 @@
 package com.kec.busconnect.ui.tracking
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +25,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,6 +46,7 @@ fun BusTrackingScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
     val context = LocalContext.current
+    val displayBusNumber = if (busNumber.startsWith("KEC")) busNumber else (uiState.liveStatus?.busNumber ?: "KEC-07")
 
     var showShareConfirmDialog by remember { mutableStateOf(false) }
 
@@ -59,502 +70,535 @@ fun BusTrackingScreen(
     Scaffold(
         topBar = {
             AppHeader(
-                title = "Bus $busNumber Tracking",
-                subtitle = uiState.route?.name ?: "MDR87 Corridor",
+                title = "Bus $displayBusNumber Tracking",
+                subtitle = uiState.route?.name ?: "Attikuppam → KEC (MDR87)",
                 onBackClick = onBackClick,
                 actions = {
                     FreshnessBadge(
-                        freshness = uiState.liveStatus?.freshness ?: "LOCATION_DELAYED",
+                        freshness = uiState.liveStatus?.freshness ?: "LIVE",
                         modifier = Modifier.padding(end = 12.dp)
                     )
                 }
             )
         },
-        containerColor = DarkBackground
+        containerColor = LightBackground
     ) { paddingValues ->
-        if (uiState.isLoading && uiState.liveStatus == null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = PrimaryBlue)
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp)
-                    .verticalScroll(scrollState)
-            ) {
-                // 1. Arrival Alert Banner
-                if (uiState.arrivalAlert != null) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = AccentAmber.copy(alpha = 0.15f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = null,
-                                tint = AccentAmber,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = uiState.arrivalAlert!!,
-                                color = AccentAmber,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
-
-                // 2. Primary Telemetry Status Card (Speed, Currently At, Next, ETA)
-                val live = uiState.liveStatus
-                val speedVal = (live?.speed ?: 0.0).toInt()
-
-                GlassCard(
-                    borderColor = if (live?.freshness == "LIVE") PrimaryBlue else DarkCardBorder
+        Crossfade(targetState = uiState.isLoading && uiState.liveStatus == null, label = "TrackingLoading") { isLoading ->
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
+                    CircularProgressIndicator(color = PrimaryBlue)
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(16.dp)
+                        .verticalScroll(scrollState)
+                ) {
+                    // 1. Arrival Alert Banner with Smooth Animation
+                    AnimatedVisibility(
+                        visible = uiState.arrivalAlert != null,
+                        enter = fadeIn() + slideInVertically(),
+                        exit = fadeOut()
                     ) {
-                        Column {
-                            Text(
-                                text = busNumber,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "$speedVal km/h",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PrimaryBlue
-                            )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TripDirectionBadge(direction = live?.direction ?: uiState.selectedDirection)
-                            SourceTypeBadge(sourceType = live?.sourceType)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "CURRENTLY AT", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = live?.currentlyAtStop ?: "In Transit",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
-                        }
-
-                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                            Text(text = "NEXT STOP", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = live?.nextStop ?: "Destination",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
-                        }
-                    }
-
-                    if (live?.etaMinutesToNextStop != null && live.etaMinutesToNextStop > 0) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(DarkSurfaceVariant.copy(alpha = 0.5f))
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = "ETA to next stop", fontSize = 12.sp, color = TextSecondary)
-                            Text(
-                                text = "${live.etaMinutesToNextStop.toInt()} min",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = SuccessEmerald
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // 3. Direction Toggle (Morning Arrival vs Evening Departure)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(DarkSurface),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    val isMorning = uiState.selectedDirection == "MORNING"
-                    Button(
-                        onClick = { viewModel.setDirection("MORNING") },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isMorning) PrimaryBlue else DarkSurface
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.weight(1f).padding(4.dp)
-                    ) {
-                        Text(
-                            text = "🌅 Morning (To KEC)",
-                            fontSize = 12.sp,
-                            fontWeight = if (isMorning) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isMorning) TextPrimary else TextSecondary
-                        )
-                    }
-
-                    Button(
-                        onClick = { viewModel.setDirection("EVENING") },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (!isMorning) PurpleEvening else DarkSurface
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.weight(1f).padding(4.dp)
-                    ) {
-                        Text(
-                            text = "🌇 Evening (Return)",
-                            fontSize = 12.sp,
-                            fontWeight = if (!isMorning) FontWeight.Bold else FontWeight.Normal,
-                            color = if (!isMorning) TextPrimary else TextSecondary
-                        )
-                    }
-                }
-
-                // 4. Interactive Live Map
-                NativeMapView(
-                    liveStatus = uiState.liveStatus,
-                    stops = uiState.stops
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // 5. Boarding Stop Selector & Live Proximity
-                var showStopDialog by remember { mutableStateOf(false) }
-
-                GlassCard {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { showStopDialog = true }
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "SELECTED STOP FOR ARRIVAL ALERT",
-                                fontSize = 10.sp,
-                                color = TextMuted,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = uiState.selectedStop?.name ?: "Attikuppam (Origin)",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
-                            if (uiState.selectedStop?.landmark != null) {
-                                Text(
-                                    text = uiState.selectedStop!!.landmark!!,
-                                    fontSize = 12.sp,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(PrimaryBlue.copy(alpha = 0.15f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Change Stop",
-                                tint = PrimaryBlue,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column {
-                            Text(text = "DISTANCE TO STOP", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = uiState.distanceToSelectedStopKm?.let { "${String.format(java.util.Locale.US, "%.1f", it)} km" } ?: "-- km",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PrimaryBlue
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(text = "ESTIMATED ARRIVAL", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = uiState.etaMinutesToSelectedStop?.let { "~${it.toInt()} mins" } ?: "-- mins",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = SuccessEmerald
-                            )
-                        }
-                    }
-                }
-
-                if (showStopDialog) {
-                    AlertDialog(
-                        onDismissRequest = { showStopDialog = false },
-                        title = { Text("Select Stop", color = TextPrimary, fontWeight = FontWeight.Bold) },
-                        text = {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 360.dp)
-                                    .verticalScroll(rememberScrollState())
-                            ) {
-                                uiState.stops.forEachIndexed { idx, stop ->
-                                    val isSelected = stop.name == uiState.selectedStop?.name
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(if (isSelected) PrimaryBlue.copy(alpha = 0.15f) else DarkSurface)
-                                            .clickable {
-                                                viewModel.selectStop(stop.name)
-                                                showStopDialog = false
-                                            }
-                                            .padding(10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .background(if (isSelected) PrimaryBlue else DarkSurfaceVariant, CircleShape),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(text = "${idx + 1}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                        }
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(text = stop.name, color = if (isSelected) PrimaryBlue else TextPrimary, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                                            if (!stop.landmark.isNullOrBlank()) {
-                                                Text(text = stop.landmark, color = TextMuted, fontSize = 11.sp)
-                                            }
-                                        }
-                                        if (isSelected) {
-                                            Icon(Icons.Default.Check, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(18.dp))
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                }
-                            }
-                        },
-                        confirmButton = {
-                            TextButton(onClick = { showStopDialog = false }) {
-                                Text("Close", color = PrimaryBlue)
-                            }
-                        },
-                        containerColor = DarkSurface
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // 6. Student Location Sharing Panel
-                val isSharing = uiState.isSharingLocationLocally
-                GlassCard(
-                    borderColor = if (isSharing) SuccessEmerald else DarkCardBorder
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Navigation,
-                                    contentDescription = null,
-                                    tint = if (isSharing) SuccessEmerald else PrimaryBlue,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isSharing) "Location Sharing Active" else "Share Bus Location",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = TextPrimary
-                                )
-                            }
-                            Text(
-                                text = if (isSharing) {
-                                    "Your phone's GPS is sharing this bus's live location with fellow passengers."
-                                } else {
-                                    "Travelling on this bus? Help other students by sharing live GPS."
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextSecondary,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    if (!isSharing) {
-                        Button(
-                            onClick = {
-                                if (LocationHelper.hasLocationPermissions(context)) {
-                                    showShareConfirmDialog = true
-                                } else {
-                                    permissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION
-                                        )
-                                    )
-                                }
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                            modifier = Modifier.fillMaxWidth().height(46.dp)
-                        ) {
-                            Icon(Icons.Default.ShareLocation, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "SHARE BUS LOCATION", fontWeight = FontWeight.Bold)
-                        }
-                    } else {
-                        Button(
-                            onClick = {
-                                BusLocationForegroundService.stop(context)
-                                viewModel.setLocalSharingState(false)
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = DangerRose),
-                            modifier = Modifier.fillMaxWidth().height(46.dp)
-                        ) {
-                            Icon(Icons.Default.Stop, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("STOP SHARING LOCATION", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // 7. Route Progress Timeline
-                if (uiState.stops.isNotEmpty()) {
-                    Text(
-                        text = "ROUTE PROGRESS (${uiState.stops.size} STOPS)",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextMuted,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                    )
-
-                    val currentStopIndex = uiState.stops.indexOfFirst { it.name == live?.currentlyAtStop }
-
-                    uiState.stops.forEachIndexed { index, stop ->
-                        val isCurrent = stop.name == live?.currentlyAtStop
-                        val isNext = stop.name == live?.nextStop
-                        val isPassed = currentStopIndex >= 0 && index < currentStopIndex
-                        val isSelected = stop.name == uiState.selectedStop?.name
-
-                        GlassCard(
-                            borderColor = if (isSelected) PrimaryBlue else if (isCurrent) SuccessEmerald else if (isNext) AccentAmber else DarkCardBorder,
-                            modifier = Modifier
-                                .padding(bottom = 8.dp)
-                                .clickable { viewModel.selectStop(stop.name) }
+                                .padding(bottom = 14.dp)
+                                .shadow(2.dp, RoundedCornerShape(14.dp)),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = AccentAmberLight),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, AccentAmber.copy(alpha = 0.3f))
                         ) {
                             Row(
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Icon(
+                                    imageVector = Icons.Default.NotificationsActive,
+                                    contentDescription = null,
+                                    tint = AccentAmber,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = uiState.arrivalAlert ?: "",
+                                    color = AccentAmber,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    // 2. Primary Telemetry Status Card (Speed, Currently At, Next, ETA)
+                    val live = uiState.liveStatus
+                    val speedVal = (live?.speed ?: 0.0).toInt()
+
+                    GlassCard(
+                        borderColor = if (live?.freshness == "LIVE") PrimaryBlueBorder else LightCardBorder
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column {
+                                Text(
+                                    text = displayBusNumber,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = TextPrimary
+                                )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier
-                                            .size(26.dp)
-                                            .background(
-                                                if (isCurrent) SuccessEmerald
-                                                else if (isNext) AccentAmber
-                                                else if (isPassed) SuccessEmerald.copy(alpha = 0.2f)
-                                                else PrimaryBlue.copy(alpha = 0.2f),
-                                                RoundedCornerShape(6.dp)
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (isPassed) {
-                                            Icon(Icons.Default.Check, contentDescription = "Passed", tint = SuccessEmerald, modifier = Modifier.size(16.dp))
-                                        } else {
-                                            Text(
-                                                text = "${index + 1}",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isCurrent || isNext) TextPrimary else PrimaryBlue
-                                            )
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(SuccessEmerald)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "$speedVal km/h",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PrimaryBlue
+                                    )
+                                }
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TripDirectionBadge(direction = live?.direction ?: uiState.selectedDirection)
+                                SourceTypeBadge(sourceType = live?.sourceType)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = LightCardBorder, thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = "CURRENTLY AT", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = live?.currentlyAtStop ?: "Attikuppam (Origin)",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                            }
+
+                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                Text(text = "NEXT STOP", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = live?.nextStop ?: "Manendram Village Stop",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                            }
+                        }
+
+                        if (live?.etaMinutesToNextStop != null && live.etaMinutesToNextStop > 0) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(LightSurfaceVariant)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "Estimated Time to Next Stop", fontSize = 12.sp, color = TextSecondary)
+                                Text(
+                                    text = "${live.etaMinutesToNextStop.toInt()} mins",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SuccessEmerald
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // 3. Direction Toggle (Morning Arrival vs Evening Departure)
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = LightSurface,
+                        shadowElevation = 2.dp,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LightCardBorder),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(4.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            val isMorning = uiState.selectedDirection == "MORNING"
+                            Button(
+                                onClick = { viewModel.setDirection("MORNING") },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isMorning) PrimaryBlue else Color.Transparent,
+                                    contentColor = if (isMorning) Color.White else TextSecondary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "🌅 Morning (To KEC)",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isMorning) FontWeight.Bold else FontWeight.Medium
+                                )
+                            }
+
+                            Button(
+                                onClick = { viewModel.setDirection("EVENING") },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (!isMorning) PurpleEvening else Color.Transparent,
+                                    contentColor = if (!isMorning) Color.White else TextSecondary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "🌇 Evening (Return)",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (!isMorning) FontWeight.Bold else FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    // 4. Interactive Live Map (Google Maps / OpenStreetMap Tiles)
+                    NativeMapView(
+                        liveStatus = uiState.liveStatus,
+                        stops = uiState.stops
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 5. Boarding Stop Selector & Live Proximity
+                    var showStopDialog by remember { mutableStateOf(false) }
+
+                    GlassCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { showStopDialog = true }
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "SELECTED STOP FOR ARRIVAL ALERT",
+                                    fontSize = 10.sp,
+                                    color = TextMuted,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = uiState.selectedStop?.name ?: "Attikuppam (Origin)",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                if (uiState.selectedStop?.landmark != null) {
+                                    Text(
+                                        text = uiState.selectedStop!!.landmark!!,
+                                        fontSize = 12.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(PrimaryBlueLight, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LocationOn,
+                                    contentDescription = "Change Stop",
+                                    tint = PrimaryBlue,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = LightCardBorder, thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column {
+                                Text(text = "DISTANCE TO STOP", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = uiState.distanceToSelectedStopKm?.let { "${String.format(java.util.Locale.US, "%.1f", it)} km" } ?: "-- km",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryBlue
+                                )
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(text = "ESTIMATED ARRIVAL", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = uiState.etaMinutesToSelectedStop?.let { "~${it.toInt()} mins" } ?: "-- mins",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SuccessEmerald
+                                )
+                            }
+                        }
+                    }
+
+                    if (showStopDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showStopDialog = false },
+                            title = { Text("Select Boarding Stop", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                            text = {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 380.dp)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    uiState.stops.forEachIndexed { idx, stop ->
+                                        val isSelected = stop.name == uiState.selectedStop?.name
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(if (isSelected) PrimaryBlueLight else Color.Transparent)
+                                                .clickable {
+                                                    viewModel.selectStop(stop.name)
+                                                    showStopDialog = false
+                                                }
+                                                .padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(26.dp)
+                                                    .background(if (isSelected) PrimaryBlue else LightSurfaceVariant, CircleShape),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "${idx + 1}",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isSelected) Color.White else TextSecondary
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = stop.name,
+                                                    color = if (isSelected) PrimaryBlue else TextPrimary,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                    fontSize = 13.sp
+                                                )
+                                                if (!stop.landmark.isNullOrBlank()) {
+                                                    Text(text = stop.landmark, color = TextMuted, fontSize = 11.sp)
+                                                }
+                                            }
+                                            if (isSelected) {
+                                                Icon(Icons.Default.Check, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(20.dp))
+                                            }
                                         }
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = stop.name,
-                                            fontSize = 14.sp,
-                                            fontWeight = if (isSelected || isCurrent || isNext) FontWeight.Bold else FontWeight.Medium,
-                                            color = TextPrimary
-                                        )
-                                        if (!stop.landmark.isNullOrBlank()) {
-                                            Text(
-                                                text = stop.landmark,
-                                                fontSize = 11.sp,
-                                                color = TextMuted
-                                            )
-                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
                                     }
                                 }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showStopDialog = false }) {
+                                    Text("Done", color = PrimaryBlue, fontWeight = FontWeight.Bold)
+                                }
+                            },
+                            containerColor = LightSurface
+                        )
+                    }
 
-                                if (isCurrent) {
-                                    Text(text = "CURRENT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SuccessEmerald)
-                                } else if (isNext) {
-                                    Text(text = "NEXT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AccentAmber)
-                                } else if (isPassed) {
-                                    Text(text = "✓", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SuccessEmerald)
-                                } else if (isSelected) {
-                                    Text(text = "SELECTED", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 6. Student Live GPS Crowdsourcing Sharing Card
+                    val isSharing = uiState.isSharingLocationLocally
+                    GlassCard(
+                        borderColor = if (isSharing) SuccessEmerald.copy(alpha = 0.5f) else LightCardBorder
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Navigation,
+                                        contentDescription = null,
+                                        tint = if (isSharing) SuccessEmerald else PrimaryBlue,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isSharing) "Location Sharing Active" else "Share Bus Location",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = if (isSharing) {
+                                        "Your phone is sharing live GPS telemetry so fellow students can track Bus $busNumber."
+                                    } else {
+                                        "Travelling on Bus $busNumber? Share live location to help other students."
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = TextSecondary,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        if (!isSharing) {
+                            Button(
+                                onClick = {
+                                    if (LocationHelper.hasLocationPermissions(context)) {
+                                        showShareConfirmDialog = true
+                                    } else {
+                                        permissionLauncher.launch(
+                                            arrayOf(
+                                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                                Manifest.permission.ACCESS_COARSE_LOCATION
+                                            )
+                                        )
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                            ) {
+                                Icon(Icons.Default.ShareLocation, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = "SHARE BUS LOCATION", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    BusLocationForegroundService.stop(context)
+                                    viewModel.setLocalSharingState(false)
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = DangerRose),
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                            ) {
+                                Icon(Icons.Default.Stop, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("STOP SHARING LOCATION", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 7. Route Progress Timeline (All 16 corridor stops)
+                    if (uiState.stops.isNotEmpty()) {
+                        Text(
+                            text = "OFFICIAL CORRIDOR STOPS (${uiState.stops.size})",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextMuted,
+                            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                        )
+
+                        val currentStopIndex = uiState.stops.indexOfFirst { it.name == live?.currentlyAtStop }
+
+                        uiState.stops.forEachIndexed { index, stop ->
+                            val isCurrent = stop.name == live?.currentlyAtStop
+                            val isNext = stop.name == live?.nextStop
+                            val isPassed = currentStopIndex >= 0 && index < currentStopIndex
+                            val isSelected = stop.name == uiState.selectedStop?.name
+
+                            GlassCard(
+                                borderColor = if (isSelected) PrimaryBlue else if (isCurrent) SuccessEmerald else if (isNext) AccentAmber else LightCardBorder,
+                                backgroundColor = if (isSelected) PrimaryBlueLight else LightSurface,
+                                modifier = Modifier
+                                    .padding(bottom = 8.dp)
+                                    .clickable { viewModel.selectStop(stop.name) }
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .background(
+                                                    if (isCurrent) SuccessEmerald
+                                                    else if (isNext) AccentAmber
+                                                    else if (isPassed) SuccessEmeraldLight
+                                                    else PrimaryBlueLight,
+                                                    CircleShape
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (isPassed) {
+                                                Icon(Icons.Default.Check, contentDescription = "Passed", tint = SuccessEmerald, modifier = Modifier.size(16.dp))
+                                            } else {
+                                                Text(
+                                                    text = "${index + 1}",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isCurrent || isNext) Color.White else PrimaryBlue
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                text = stop.name,
+                                                fontSize = 13.sp,
+                                                fontWeight = if (isSelected || isCurrent || isNext) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) PrimaryBlue else TextPrimary
+                                            )
+                                            if (!stop.landmark.isNullOrBlank()) {
+                                                Text(
+                                                    text = stop.landmark,
+                                                    fontSize = 11.sp,
+                                                    color = TextMuted
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (isCurrent) {
+                                        Text(text = "CURRENT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SuccessEmerald)
+                                    } else if (isNext) {
+                                        Text(text = "NEXT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AccentAmber)
+                                    } else if (isPassed) {
+                                        Text(text = "PASSED", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SuccessEmerald)
+                                    } else if (isSelected) {
+                                        Text(text = "ALERT SET", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                                    }
                                 }
                             }
                         }
@@ -567,10 +611,10 @@ fun BusTrackingScreen(
     if (showShareConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showShareConfirmDialog = false },
-            title = { Text("Share Live Bus Location", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            title = { Text("Share Live GPS Location", color = TextPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "KEC BusConnect will broadcast live GPS coordinates from your device in the background so other students can track the bus.",
+                    "KEC BusConnect will broadcast your phone's live GPS coordinates in the background while riding Bus $busNumber so other students receive accurate tracking.",
                     color = TextSecondary
                 )
             },
@@ -591,8 +635,7 @@ fun BusTrackingScreen(
                     Text("Cancel", color = TextSecondary)
                 }
             },
-            containerColor = DarkSurface
+            containerColor = LightSurface
         )
     }
 }
-

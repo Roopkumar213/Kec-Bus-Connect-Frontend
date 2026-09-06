@@ -4,9 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Circle
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,18 +21,18 @@ import com.kec.busconnect.ui.theme.*
 
 @Composable
 fun FreshnessBadge(freshness: String?, modifier: Modifier = Modifier) {
-    val (bgColor, textColor, label) = when (freshness?.uppercase()) {
-        "LIVE" -> Triple(SuccessEmerald.copy(alpha = 0.15f), SuccessEmerald, "● LIVE")
-        "STALE" -> Triple(AccentAmber.copy(alpha = 0.15f), AccentAmber, "● STALE")
-        else -> Triple(DangerRose.copy(alpha = 0.15f), DangerRose, "● LOCATION DELAYED")
+    val (bgColor, textColor, borderColor, label) = when (freshness?.uppercase()) {
+        "LIVE" -> Quadruple(SuccessEmeraldLight, SuccessEmerald, SuccessEmerald.copy(alpha = 0.3f), "● LIVE")
+        "STALE" -> Quadruple(AccentAmberLight, AccentAmber, AccentAmber.copy(alpha = 0.3f), "● STALE")
+        else -> Quadruple(DangerRoseLight, DangerRose, DangerRose.copy(alpha = 0.3f), "● LOCATION DELAYED")
     }
 
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
-            .border(1.dp, textColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -50,18 +47,18 @@ fun FreshnessBadge(freshness: String?, modifier: Modifier = Modifier) {
 @Composable
 fun TripDirectionBadge(direction: String?, modifier: Modifier = Modifier) {
     val isEvening = direction?.uppercase() == "EVENING"
-    val (bgColor, textColor, label) = if (isEvening) {
-        Triple(PurpleEvening.copy(alpha = 0.15f), PurpleEvening, "🌆 EVENING TRIP")
+    val (bgColor, textColor, borderColor, label) = if (isEvening) {
+        Quadruple(PurpleEveningLight, PurpleEvening, PurpleEvening.copy(alpha = 0.3f), "🌆 EVENING TRIP")
     } else {
-        Triple(PrimaryBlue.copy(alpha = 0.15f), PrimaryBlue, "🌅 MORNING TRIP")
+        Quadruple(PrimaryBlueLight, PrimaryBlue, PrimaryBlueBorder, "🌅 MORNING TRIP")
     }
 
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
-            .border(1.dp, textColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -75,26 +72,29 @@ fun TripDirectionBadge(direction: String?, modifier: Modifier = Modifier) {
 
 @Composable
 fun SourceTypeBadge(sourceType: String?, modifier: Modifier = Modifier) {
-    val (bgColor, textColor, label) = when (sourceType?.uppercase()) {
-        "DRIVER" -> Triple(PrimaryBlue.copy(alpha = 0.15f), PrimaryBlue, "🚌 Driver GPS")
-        "ADMIN" -> Triple(PurpleEvening.copy(alpha = 0.15f), PurpleEvening, "⚙️ Admin")
-        "STUDENT" -> Triple(SuccessEmerald.copy(alpha = 0.15f), SuccessEmerald, "👤 Passenger Live")
-        else -> Triple(DarkSurfaceVariant, TextSecondary, "📡 Automatic")
+    val (bgColor, textColor, borderColor, label) = when (sourceType?.uppercase()) {
+        "DRIVER" -> Quadruple(PrimaryBlueLight, PrimaryBlue, PrimaryBlueBorder, "🚌 Driver GPS")
+        "ADMIN" -> Quadruple(PurpleEveningLight, PurpleEvening, PurpleEvening.copy(alpha = 0.3f), "⚙️ Admin GPS")
+        "STUDENT" -> Quadruple(SuccessEmeraldLight, SuccessEmerald, SuccessEmerald.copy(alpha = 0.3f), "👤 Passenger Live")
+        else -> Quadruple(LightSurfaceVariant, TextSecondary, LightCardBorder, "📡 System Telemetry")
     }
 
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
-            .border(1.dp, textColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
             color = textColor,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold
         )
     }
 }
+
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+

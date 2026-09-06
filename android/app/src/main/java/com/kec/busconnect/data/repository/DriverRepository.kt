@@ -40,12 +40,10 @@ class DriverRepository(private val apiService: ApiService) {
     suspend fun getActiveTrip(busId: String): Result<TripDto?> = withContext(Dispatchers.IO) {
         try {
             val response = apiService.getActiveDriverTrip(busId)
-            if (response.isSuccessful) {
-                Result.success(response.body())
-            } else if (response.code() == 204) {
-                Result.success(null)
-            } else {
-                Result.failure(Exception("Active trip query failed: ${response.code()}"))
+            when {
+                response.isSuccessful -> Result.success(response.body())
+                response.code() == 204 || response.code() == 404 -> Result.success(null) // No active trip
+                else -> Result.failure(Exception("Active trip query failed: ${response.code()}"))
             }
         } catch (e: Exception) {
             Result.failure(e)

@@ -1,9 +1,13 @@
 package com.kec.busconnect.ui.driver
 
 import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -12,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,12 +45,11 @@ fun DriverDashboardScreen(
         }
     }
 
-    // Start / Stop Foreground Service whenever Driver starts or stops trip
+    // Start / Stop Foreground Service whenever Driver starts a trip
+    // Only react when isSharingLocation becomes TRUE to avoid stopping on initial load
     LaunchedEffect(uiState.isSharingLocation) {
         if (uiState.isSharingLocation) {
             BusLocationForegroundService.start(context, uiState.busNumber, uiState.busNumber)
-        } else {
-            BusLocationForegroundService.stop(context)
         }
     }
 
@@ -57,7 +61,7 @@ fun DriverDashboardScreen(
                 onLogoutClick = onLogoutClick
             )
         },
-        containerColor = DarkBackground
+        containerColor = LightBackground
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -75,7 +79,7 @@ fun DriverDashboardScreen(
 
             // Trip Status Card
             GlassCard(
-                borderColor = if (uiState.activeTrip != null) SuccessEmerald else DarkCardBorder
+                borderColor = if (uiState.activeTrip != null) SuccessEmerald.copy(alpha = 0.5f) else LightCardBorder
             ) {
                 Row(
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -87,23 +91,24 @@ fun DriverDashboardScreen(
                         Text(
                             text = uiState.busNumber,
                             style = MaterialTheme.typography.headlineMedium,
-                            color = TextPrimary
+                            color = TextPrimary,
+                            fontWeight = FontWeight.ExtraBold
                         )
                     }
 
                     if (uiState.activeTrip != null) {
                         Box(
                             modifier = Modifier
-                                .background(SuccessEmerald.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .background(SuccessEmeraldLight, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
                         ) {
                             Text(text = "● TRIP ACTIVE", color = SuccessEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     } else {
                         Box(
                             modifier = Modifier
-                                .background(DarkSurfaceVariant, RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .background(LightSurfaceVariant, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
                         ) {
                             Text(text = "IDLE / NOT STARTED", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
@@ -114,7 +119,7 @@ fun DriverDashboardScreen(
 
                 if (uiState.activeTrip == null) {
                     // Morning / Evening Selector before starting trip
-                    Text(text = "Select Direction:", fontSize = 13.sp, color = TextSecondary)
+                    Text(text = "Select Direction:", fontSize = 13.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.padding(vertical = 8.dp)
@@ -152,14 +157,17 @@ fun DriverDashboardScreen(
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("START TRIP & SHARE GPS", fontWeight = FontWeight.Bold)
+                        Text("START TRIP & BROADCAST GPS", fontWeight = FontWeight.Bold)
                     }
                 } else {
                     TripDirectionBadge(direction = uiState.activeTrip?.direction)
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Button(
-                        onClick = { viewModel.stopTrip() },
+                        onClick = {
+                            BusLocationForegroundService.stop(context)
+                            viewModel.stopTrip()
+                        },
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = DangerRose),
                         modifier = Modifier
@@ -181,9 +189,10 @@ fun DriverDashboardScreen(
                     Text(
                         text = "Passenger Verification",
                         style = MaterialTheme.typography.titleMedium,
-                        color = TextPrimary
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     val summary = uiState.passengerSummary
                     Row(
@@ -201,11 +210,12 @@ fun DriverDashboardScreen(
                     OutlinedButton(
                         onClick = { viewModel.requestPassengerConfirmation() },
                         shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryBlueBorder),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.NotificationsActive, contentDescription = null)
+                        Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = PrimaryBlue)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("SEND BOARDING CHECK ALERT")
+                        Text("SEND BOARDING CHECK ALERT", color = PrimaryBlue, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -214,9 +224,9 @@ fun DriverDashboardScreen(
 }
 
 @Composable
-private fun StatItem(label: String, value: String, color: androidx.compose.ui.graphics.Color = TextPrimary) {
+private fun StatItem(label: String, value: String, color: Color = TextPrimary) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = color)
+        Text(text = value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = color)
         Text(text = label, fontSize = 11.sp, color = TextMuted)
     }
 }

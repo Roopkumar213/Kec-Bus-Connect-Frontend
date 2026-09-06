@@ -12,7 +12,8 @@ data class BusDto(
     @SerializedName("routeId") val routeId: String?,
     @SerializedName("trackerId") val trackerId: String?,
     @SerializedName("status") val status: String? = "NOT_STARTED",
-    @SerializedName("active") val isActive: Boolean = true
+    @SerializedName("active") val isActive: Boolean = true,
+    @SerializedName("route") val route: RouteDto? = null
 )
 
 data class LiveBusStatusDto(
